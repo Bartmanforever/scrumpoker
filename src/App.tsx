@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, onSnapshot, setDoc } from "firebase/firestore";
 
-// Config Firebase
+// Config Firebase (ASSUREZ-VOUS QUE C'EST LA BONNE POUR VOTRE PROJET)
 const firebaseConfig = {
   apiKey: "AIzaSyAKUPGvuXs-ewcUyCKVaVbU3sMXTzGK9xY",
   authDomain: "scrum-poker-e6a75.firebaseapp.com",
@@ -59,10 +59,29 @@ export default function PlanningPokerApp() {
         setFinishedVoting(data.finishedVoting || {});
         setRevealed(data.revealed || false);
         setParticipants(data.participants || []);
+        // Si le pseudo actuel est dans les participants, marquez comme validé
+        // Utile si l'utilisateur rafraîchit la page et que son pseudo était déjà enregistré
+        if (pseudo && data.participants && data.participants.includes(pseudo)) {
+            setUserValidated(true);
+        }
+      } else {
+        // Le document n'existe pas encore, initialise un état vide
+        setVotes({});
+        setFinishedVoting({});
+        setRevealed(false);
+        setParticipants([]);
+        // Initialise le document dans Firestore si ce n'est pas déjà fait
+        // C'est une bonne pratique pour s'assurer que le document existe
+        setDoc(votesDoc, {
+          votes: {},
+          finishedVoting: {},
+          revealed: false,
+          participants: []
+        }, { merge: true });
       }
     });
     return () => unsubscribeVotes();
-  }, []);
+  }, [pseudo]); // Ajout de 'pseudo' dans les dépendances pour re-vérifier 'userValidated' si le pseudo change
 
   // Fonction pour sauvegarder les données dans Firebase
   const saveVotes = async (
@@ -176,7 +195,6 @@ export default function PlanningPokerApp() {
         flexWrap: "wrap",
         gap: 16,
         padding: 16,
-        justifyContent: "center",
       }}
     >
       {/* Zone de login */}
@@ -185,7 +203,7 @@ export default function PlanningPokerApp() {
           border: "1px solid #ddd",
           padding: 16,
           borderRadius: 8,
-          flex: "1 1 0%", // Prend une part flexible de l'espace
+          flex: "1 1 0%",
           boxSizing: "border-box",
         }}
       >
@@ -194,12 +212,13 @@ export default function PlanningPokerApp() {
           placeholder="Pseudo"
           value={pseudo}
           onChange={(e) => setPseudo(e.target.value)}
-          disabled={userValidated || admin}
+          disabled={userValidated} // L'input est désactivé SEULEMENT si userValidated est true
           style={{ width: "100%", padding: 8, marginBottom: 8, boxSizing: "border-box" }}
         />
         <button
           onClick={handleUserValidation}
-          disabled={!pseudo.trim() || userValidated || admin}
+          // Le bouton est désactivé SEULEMENT si pas de pseudo ou userValidated est true
+          disabled={!pseudo.trim() || userValidated}
           style={{ width: "100%", padding: 8, marginBottom: 24, cursor: "pointer" }}
         >
           Valider
@@ -222,13 +241,15 @@ export default function PlanningPokerApp() {
             <div style={{ marginTop: 24 }}>
                 <h3>Participants connectés</h3>
                 {participants.length > 0 ? (
-                    <ul>
+                    <ul style={{ listStyleType: "none", padding: 0 }}>
                         {participants.map((p) => (
-                            <li key={p}>{p} {finishedVoting[p] && "(a terminé)"}</li>
+                            <li key={p} style={{ marginBottom: 4 }}>
+                                {p} {finishedVoting[p] && <span style={{ color: "grey", fontSize: "0.9em" }}>(a terminé)</span>}
+                            </li>
                         ))}
                     </ul>
                 ) : (
-                    <p>Aucun participant connecté.</p>
+                    <p>Aucun participant connecté pour le moment.</p>
                 )}
             </div>
         )}
@@ -241,7 +262,7 @@ export default function PlanningPokerApp() {
             border: "1px solid #ddd",
             padding: 16,
             borderRadius: 8,
-            flex: "2 1 0%", // Prend deux parts flexibles de l'espace
+            flex: "2 1 0%",
             boxSizing: "border-box",
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
@@ -285,7 +306,8 @@ export default function PlanningPokerApp() {
             </div>
           ))}
 
-          {!finishedVoting[pseudo] && !revealed && ( // Le bouton terminer n'apparaît que si non terminé et non révélé
+          {/* MODIFIE ICI : Le bouton "J'ai terminé l'estimation" n'apparaît que si l'utilisateur est validé et n'a pas fini/révélé */}
+          {userValidated && !finishedVoting[pseudo] && !revealed && (
             <button
               onClick={handleFinishEstimation}
               style={{
@@ -299,7 +321,7 @@ export default function PlanningPokerApp() {
                 gridColumn: "span 2",
               }}
             >
-              Terminer l’estimation
+              J'ai terminé l'estimation
             </button>
           )}
 
