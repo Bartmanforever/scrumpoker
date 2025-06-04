@@ -185,8 +185,7 @@ export default function PlanningPokerApp() {
           border: "1px solid #ddd",
           padding: 16,
           borderRadius: 8,
-          maxWidth: "33%",
-          flex: "1 1 33%",
+          flex: "1 1 0%", // Prend une part flexible de l'espace
           boxSizing: "border-box",
         }}
       >
@@ -218,6 +217,21 @@ export default function PlanningPokerApp() {
         {admin && (
           <p style={{ color: "green", marginTop: 8 }}>Connecté en tant qu'administrateur</p>
         )}
+
+        {admin && (
+            <div style={{ marginTop: 24 }}>
+                <h3>Participants connectés</h3>
+                {participants.length > 0 ? (
+                    <ul>
+                        {participants.map((p) => (
+                            <li key={p}>{p} {finishedVoting[p] && "(a terminé)"}</li>
+                        ))}
+                    </ul>
+                ) : (
+                    <p>Aucun participant connecté.</p>
+                )}
+            </div>
+        )}
       </div>
 
       {/* Zone des votes */}
@@ -227,8 +241,7 @@ export default function PlanningPokerApp() {
             border: "1px solid #ddd",
             padding: 16,
             borderRadius: 8,
-            maxWidth: "67%",
-            flex: "2 1 67%",
+            flex: "2 1 0%", // Prend deux parts flexibles de l'espace
             boxSizing: "border-box",
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
