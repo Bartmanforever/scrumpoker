@@ -7,14 +7,14 @@ import {
   setDoc,
 } from "firebase/firestore"
 
-// Ta config Firebase
+// Config Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyAKUPGvuXs-ewcUyCKVaVbU3sMXTzGK9xY",
   authDomain: "scrum-poker-e6a75.firebaseapp.com",
   projectId: "scrum-poker-e6a75",
-  storageBucket: "scrum-poker-e6a75.firebasestorage.app",
+  storageBucket: "scrum-poker-e6a75.appspot.com",
   messagingSenderId: "651145301518",
-  appId: "1:651145301518:web:3ee004510ec2065f"
+  appId: "1:651145301518:web:3ee004510ec2065f",
 }
 
 // Initialize Firebase & Firestore
@@ -32,7 +32,6 @@ const phases = [
 ]
 
 const fibonacciValues = [0, 0.5, 1, 2, 3, 5, 8, 13, 20]
-
 const fibonacciLabels: Record<number, string> = {
   0: "peu d'effort, quasi nul",
   0.5: "très simple / trivial",
@@ -50,7 +49,6 @@ export default function PlanningPokerApp() {
   const [adminPassword, setAdminPassword] = useState("")
   const [admin, setAdmin] = useState(false)
   const [userValidated, setUserValidated] = useState(false)
-
   const [votes, setVotes] = useState<Record<string, Record<string, number>>>({})
   const [finishedVoting, setFinishedVoting] = useState<Record<string, boolean>>({})
   const [revealed, setRevealed] = useState(false)
@@ -67,19 +65,23 @@ export default function PlanningPokerApp() {
         setParticipants(data.participants || [])
       }
     })
-
     return () => unsubscribeVotes()
   }, [])
 
-  const saveVotes = async (newVotes: typeof votes, newFinished?: typeof finishedVoting, newRevealed?: boolean, newParticipants?: string[]) => {
+  const saveVotes = async (
+    newVotes: typeof votes,
+    newFinished = finishedVoting,
+    newRevealed = revealed,
+    newParticipants = participants
+  ) => {
     const votesDoc = doc(db, "planningPoker", "votes")
     await setDoc(
       votesDoc,
       {
         votes: newVotes,
-        finishedVoting: newFinished ?? finishedVoting,
-        revealed: newRevealed ?? revealed,
-        participants: newParticipants ?? participants,
+        finishedVoting: newFinished,
+        revealed: newRevealed,
+        participants: newParticipants,
       },
       { merge: true }
     )
@@ -101,13 +103,19 @@ export default function PlanningPokerApp() {
     }
   }
 
+  // ✅ VERSION MODIFIÉE : bouton décochable
   const handleVote = async (phase: string, value: number) => {
     if (!pseudo) return
     const newVotes = { ...votes }
     if (!newVotes[phase]) newVotes[phase] = {}
-    newVotes[phase][pseudo] = value
-    setVotes(newVotes)
 
+    if (newVotes[phase][pseudo] === value) {
+      delete newVotes[phase][pseudo]
+    } else {
+      newVotes[phase][pseudo] = value
+    }
+
+    setVotes(newVotes)
     await saveVotes(newVotes)
   }
 
@@ -122,7 +130,7 @@ export default function PlanningPokerApp() {
     const newVotes = { ...votes }
     delete newVotes[phase]
     setVotes(newVotes)
-    await saveVotes(newVotes, finishedVoting)
+    await saveVotes(newVotes)
   }
 
   const resetAll = async () => {
@@ -137,8 +145,7 @@ export default function PlanningPokerApp() {
     if (!phaseVotes) return 0
     const values = Object.values(phaseVotes)
     if (values.length === 0) return 0
-    const sum = values.reduce((acc, val) => acc + val, 0)
-    return sum / values.length
+    return values.reduce((acc, val) => acc + val, 0) / values.length
   }
 
   const totalEstimate = () => {
@@ -150,158 +157,144 @@ export default function PlanningPokerApp() {
   const isLoggedIn = (userValidated && pseudo.trim() !== "") || admin
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-      <div style={{ border: "1px solid #ddd", padding: 16, borderRadius: 8 }}>
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 16,
+        padding: 16,
+        justifyContent: "center",
+      }}
+    >
+      {/* Zone de login */}
+      <div
+        style={{
+          border: "1px solid #ddd",
+          padding: 16,
+          borderRadius: 8,
+          maxWidth: "33%",
+          flex: "1 1 33%",
+          boxSizing: "border-box",
+        }}
+      >
         <p>Entrez votre pseudo pour voter :</p>
         <input
           placeholder="Pseudo"
           value={pseudo}
           onChange={(e) => setPseudo(e.target.value)}
           disabled={userValidated || admin}
-          style={{ width: "100%", padding: 8, marginBottom: 8 }}
+          style={{ width: "100%", padding: 8, marginBottom: 8, boxSizing: "border-box" }}
         />
         <button
           onClick={handleUserValidation}
           disabled={!pseudo.trim() || userValidated || admin}
-          style={{ width: "100%", padding: 8 }}
+          style={{ width: "100%", padding: 8, marginBottom: 24, cursor: "pointer" }}
         >
           Valider
         </button>
 
-        <p style={{ marginTop: 24, fontWeight: "bold" }}>
-          Espace Admin (réservé uniquement à l'admin) :
-        </p>
+        <p style={{ fontWeight: "bold" }}>Espace Admin :</p>
         <input
           type="password"
           placeholder="Mot de passe admin"
           value={adminPassword}
           onChange={(e) => setAdminPassword(e.target.value)}
           onKeyDown={handleLogin}
-          disabled={admin}
-          style={{ width: "100%", padding: 8, marginBottom: 4 }}
+          style={{ width: "100%", padding: 8 }}
         />
-        <p style={{ fontSize: 12, color: "#666", marginBottom: 8 }}>
-          (Validez avec Entrée)
-        </p>
-
-        {admin && (
-          <>
-            <button
-              onClick={() => setRevealed(true)}
-              style={{ width: "100%", padding: 8, marginBottom: 8 }}
-            >
-              Révéler les estimations
-            </button>
-            <button
-              onClick={resetAll}
-              style={{ width: "100%", padding: 8, backgroundColor: "#eee" }}
-            >
-              Reset total
-            </button>
-
-            <div style={{ marginTop: 16 }}>
-              <div style={{ fontWeight: "bold" }}>Statut des votants :</div>
-              {participants.length === 0 && <p>Aucun participant</p>}
-              {participants.map((user) => (
-                <div key={user} style={{ marginTop: 4 }}>
-                  {finishedVoting[user] ? (
-                    <span style={{ color: "green" }}>✅ {user} a terminé</span>
-                  ) : (
-                    <span style={{ color: "orange" }}>⏳ {user} n’a pas encore terminé</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-
-        {revealed && (
-          <div style={{ marginTop: 16, fontWeight: "bold" }}>
-            Estimation totale : {totalEstimate()}
-          </div>
-        )}
       </div>
 
-      {isLoggedIn &&
-        phases.map((phase) => (
-          <div
-            key={phase}
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: 8,
-              padding: 16,
-              marginBottom: 16,
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <h2>{phase}</h2>
-              {admin && (
-                <button onClick={() => resetVotes(phase)} style={{ fontSize: 12 }}>
-                  Reset phase
-                </button>
-              )}
+      {/* Zone des votes */}
+      {isLoggedIn && (
+        <div
+          style={{
+            border: "1px solid #ddd",
+            padding: 16,
+            borderRadius: 8,
+            maxWidth: "67%",
+            flex: "2 1 67%",
+            boxSizing: "border-box",
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 24,
+          }}
+        >
+          {phases.map((phase) => (
+            <div key={phase} style={{ marginBottom: 24 }}>
+              <h3>{phase}</h3>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {fibonacciValues.map((val) => {
+                  const isSelected = votes[phase]?.[pseudo] === val
+                  return (
+                    <button
+                      key={val}
+                      onClick={() => handleVote(phase, val)}
+                      disabled={finishedVoting[pseudo]}
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: 4,
+                        border: isSelected ? "2px solid #007bff" : "1px solid #ccc",
+                        backgroundColor: isSelected ? "#cce5ff" : "#fff",
+                        cursor: finishedVoting[pseudo] ? "not-allowed" : "pointer",
+                      }}
+                      title={fibonacciLabels[val]}
+                    >
+                      {val}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-            <div
+          ))}
+
+          {!finishedVoting[pseudo] && (
+            <button
+              onClick={handleFinishEstimation}
               style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, 1fr)",
-                gap: 8,
-                marginTop: 12,
+                marginTop: 16,
+                padding: "8px 12px",
+                cursor: "pointer",
+                backgroundColor: "#28a745",
+                color: "#fff",
+                border: "none",
+                borderRadius: 4,
+                gridColumn: "span 2",
               }}
             >
-              {fibonacciValues.map((val) => (
-                <div
-                  key={val}
-                  style={{
-                    border: "1px solid #ccc",
-                    padding: 8,
-                    borderRadius: 4,
-                    cursor: "pointer",
-                    backgroundColor:
-                      votes[phase]?.[pseudo] === val ? "#1976d2" : "#fff",
-                    color: votes[phase]?.[pseudo] === val ? "#fff" : "#000",
-                  }}
-                  title={fibonacciLabels[val]}
-                  onClick={() => handleVote(phase, val)}
-                >
-                  {val}
+              Terminer l’estimation
+            </button>
+          )}
+
+          {admin && (
+            <div style={{ marginTop: 32, gridColumn: "span 2" }}>
+              <h3>Gestion des phases</h3>
+              {phases.map((phase) => (
+                <div key={phase} style={{ marginBottom: 8 }}>
+                  <button
+                    onClick={() => resetVotes(phase)}
+                    style={{
+                      padding: "6px 10px",
+                      cursor: "pointer",
+                      backgroundColor: "#dc3545",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 4,
+                    }}
+                  >
+                    Reset votes {phase}
+                  </button>
                 </div>
               ))}
             </div>
+          )}
 
-            {votes[phase] && revealed && (
-              <div style={{ marginTop: 16 }}>
-                <div>
-                  <b>Moyenne :</b> {calculateAverage(votes[phase]).toFixed(2)}
-                </div>
-                <div style={{ marginTop: 8 }}>
-                  {Object.entries(votes[phase]).map(([user, vote]) => (
-                    <div
-                      key={user}
-                      style={{
-                        padding: "4px 8px",
-                        backgroundColor: user === pseudo ? "#bbdefb" : "#eee",
-                        borderRadius: 4,
-                        marginTop: 4,
-                      }}
-                    >
-                      {user}: {vote}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {!finishedVoting[pseudo] && !admin && (
-              <button
-                onClick={handleFinishEstimation}
-                style={{ marginTop: 12, width: "100%", padding: 8 }}
-              >
-                Terminer l'estimation
-              </button>
-            )}
-          </div>
-        ))}
+          {revealed && (
+            <div style={{ marginTop: 24, fontWeight: "bold", gridColumn: "span 2" }}>
+              Estimation totale : {totalEstimate()}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
