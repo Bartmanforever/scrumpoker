@@ -366,7 +366,7 @@ export default function PlanningPokerApp() {
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
             gap: 24,
-            position: "relative", // Pour positionner la légende en bas à droite
+            // Retiré position: "relative" d'ici car la légende sera hors de la grille des phases
           }}
         >
           {/* Section affichage total votant / total groupe pour les votants */}
@@ -502,18 +502,19 @@ export default function PlanningPokerApp() {
                 gridColumn: "1 / span 1", // Occupe une seule colonne, aligné à gauche
                 justifySelf: "start", // Aligne à gauche dans la grille
                 marginRight: "auto", // Assure qu'il reste à gauche
+                // Ajout de margin-bottom pour éloigner la légende si elle vient après
+                marginBottom: 24, 
               }}
             >
               J'ai terminé l'estimation
             </button>
           )}
 
-          {/* Légende des valeurs Fibonacci (en bas à droite, format paysage) */}
+          {/* Légende des valeurs Fibonacci (maintenant en dehors de la grille des phases pour éviter les superpositions) */}
           <div
             style={{
-              position: "absolute",
-              bottom: 16,
-              right: 16,
+              gridColumn: "span 2", // Occupe toute la largeur du parent de la grille
+              // Positionnement par flux normal du document, pas absolu
               border: "1px solid #eee",
               borderRadius: 8,
               padding: 12,
@@ -522,11 +523,10 @@ export default function PlanningPokerApp() {
               display: "flex",
               flexWrap: "wrap",
               gap: "8px 15px",
-              maxWidth: "50%", // Limite la largeur pour ne pas prendre trop de place
+              // Laisser la largeur s'adapter au contenu ou définir une max-width si nécessaire
+              // Retiré maxWidth, left, transform pour un positionnement par flux
               alignItems: "flex-start",
-              // Pour s'assurer qu'elle ne déborde pas sur le bouton
-              left: "50%", // Commence à 50% de la largeur du parent
-              transform: "translateX(0)", // Aucun décalage
+              marginTop: 24, // Assure un espacement avec le contenu au-dessus
             }}
           >
             <h4 style={{ margin: "0", color: "#555", width: "100%", marginBottom: 10 }}>Légende des valeurs :</h4>
