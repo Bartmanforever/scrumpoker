@@ -147,11 +147,20 @@ export default function PlanningPokerApp() {
   };
 
   // Réinitialise les votes pour une phase spécifique (Admin)
-  const resetVotes = async (phase: string) => {
+  const resetPhaseVotes = async (phase: string) => { // Renommé pour plus de clarté
     const newVotes = { ...votes };
     delete newVotes[phase];
     setVotes(newVotes);
     await saveVotes(newVotes);
+  };
+
+  // Nouveau bouton: Réinitialise TOUS les votes, mais garde les participants
+  const resetAllVotesKeepParticipants = async () => {
+    setVotes({}); // Efface tous les votes
+    setFinishedVoting({}); // Réinitialise l'état "terminé" pour tous
+    setRevealed(false); // Cache les estimations
+    // participants reste inchangé
+    await saveVotes({}, {}, false, participants); // Sauvegarde l'état
   };
 
   // Réinitialise toutes les données de l'application (Admin)
@@ -231,18 +240,17 @@ export default function PlanningPokerApp() {
           value={adminPassword}
           onChange={(e) => setAdminPassword(e.target.value)}
           onKeyDown={handleLogin}
-          style={{ width: "100%", padding: 8, boxSizing: "border-box" }}
+          style={{ width: "100%", padding: 8, boxSizing: "border-box", marginBottom: 8 }}
         />
         {admin && (
           <p style={{ color: "green", marginTop: 8 }}>Connecté en tant qu'administrateur</p>
         )}
 
-        {/* NOUVEL EMPLACEMENT : Bouton Révéler les estimations */}
+        {/* NOUVEL EMPLACEMENT : Bouton Révéler les estimations + Estimation totale */}
         {admin && (
           <div style={{ marginTop: 24 }}>
             <button
               onClick={revealEstimations}
-              disabled={revealed} // Désactive si déjà révélé
               style={{
                 width: "100%", // Rend le bouton prendre toute la largeur
                 padding: "8px 12px",
@@ -251,16 +259,21 @@ export default function PlanningPokerApp() {
                 color: "#fff",
                 border: "none",
                 borderRadius: 4,
-                marginBottom: 16, // Espace sous le bouton
+                marginBottom: 8, // Espace sous le bouton
               }}
             >
               Révéler les estimations
             </button>
+            {revealed && ( // Affichage de l'estimation totale si révélée
+              <div style={{ fontWeight: "bold", fontSize: "1.2em", color: "#28a745", marginBottom: 16 }}>
+                Estimation totale : {totalEstimate()}
+              </div>
+            )}
           </div>
         )}
 
         {admin && (
-            <div style={{ marginTop: 10 }}> {/* Ajustement de la marge supérieure */}
+            <div style={{ marginTop: revealed ? 10 : 24 }}> {/* Ajustement de la marge supérieure */}
                 <h3>Participants connectés</h3>
                 {participants.length > 0 ? (
                     <ul style={{ listStyleType: "none", padding: 0 }}>
@@ -268,11 +281,9 @@ export default function PlanningPokerApp() {
                             <li key={p} style={{ marginBottom: 4 }}>
                                 {p}{" "}
                                 {/* Condition pour afficher le sablier ou l'encoche verte */}
-                                {userValidated && p === pseudo && !finishedVoting[p] ? ( // Si c'est l'utilisateur actuel et qu'il n'a pas terminé
-                                  <span title="Vous n'avez pas encore terminé votre estimation">⏳</span>
-                                ) : finishedVoting[p] ? ( // Si le participant a terminé
+                                {finishedVoting[p] ? ( // Si le participant a terminé
                                   <span title="A terminé son estimation">✅</span>
-                                ) : ( // Si le participant n'a pas terminé (et n'est pas l'utilisateur actuel)
+                                ) : ( // Si le participant n'a pas terminé
                                   <span title="N'a pas encore terminé son estimation">⏳</span>
                                 )}
                             </li>
@@ -281,6 +292,23 @@ export default function PlanningPokerApp() {
                 ) : (
                     <p>Aucun participant connecté pour le moment.</p>
                 )}
+                {/* NOUVEAU BOUTON : Réinitialiser tous les votes mais conserver les participants */}
+                <button
+                    onClick={resetAllVotesKeepParticipants}
+                    style={{
+                      marginTop: 16,
+                      padding: "8px 12px",
+                      cursor: "pointer",
+                      backgroundColor: "#ffc107",
+                      color: "#333",
+                      border: "none",
+                      borderRadius: 4,
+                      width: "100%",
+                      boxSizing: "border-box",
+                    }}
+                >
+                    Réinitialiser tous les votes (conserver participants)
+                </button>
             </div>
         )}
       </div>
@@ -307,53 +335,58 @@ export default function PlanningPokerApp() {
                   <p style={{ fontWeight: "bold", margin: "8px 0", color: "#0056b3" }}>
                     Moyenne : {calculateAverage(votes[phase]).toFixed(2)}
                   </p>
-                  {/* Afficher les votes individuels */}
-                  <div style={{ marginTop: 10, borderTop: "1px dashed #eee", paddingTop: 10 }}>
-                    <p style={{ fontWeight: "bold", marginBottom: 5 }}>Détails des votes :</p>
-                    <ul style={{ listStyleType: "none", padding: 0 }}>
-                      {participants.map((participantName) => {
-                        const voteValue = votes[phase]?.[participantName]; // Récupère le vote du participant pour cette phase
-                        return (
-                          <li key={`${phase}-${participantName}`} style={{ marginBottom: 3 }}>
-                            <span style={{ fontWeight: "normal" }}>{participantName} : </span>
-                            <span style={{ color: voteValue !== undefined ? '#333' : 'red', fontWeight: 'bold' }}>
-                              {voteValue !== undefined ? voteValue : "N'a pas voté"}
-                            </span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
+                  {/* MODIFIE ICI : Flexbox pour côte à côte */}
+                  <div style={{ display: "flex", gap: 15, marginTop: 10, borderTop: "1px dashed #eee", paddingTop: 10 }}>
+                    {/* NOUVELLE LOGIQUE : Affichage du nombre de votes par valeur */}
+                    <div style={{ flex: 1, minWidth: "120px" }}> {/* Ajout de minWidth pour éviter un écrasement trop fort */}
+                      <p style={{ fontWeight: "bold", marginBottom: 5 }}>Votes par valeur :</p>
+                      <ul style={{ listStyleType: "none", padding: 0 }}>
+                        {fibonacciValues.map((val) => {
+                          // CORRECTION DE L'ERREUR ICI :
+                          const currentPhaseVotes: Record<string, number> = votes[phase] || {}; // <-- Ligne corrigée
+                          const count = Object.values(currentPhaseVotes).filter(
+                            (v) => v === val
+                          ).length;
 
-                  {/* NOUVELLE LOGIQUE : Affichage du nombre de votes par valeur */}
-                  <div style={{ marginTop: 15, borderTop: "1px dashed #eee", paddingTop: 10 }}>
-                    <p style={{ fontWeight: "bold", marginBottom: 5 }}>Votes par valeur :</p>
-                    <ul style={{ listStyleType: "none", padding: 0 }}>
-                      {fibonacciValues.map((val) => {
-                        const count = Object.values(votes[phase] || {}).filter(
-                          (v) => v === val
-                        ).length;
-                        return (
-                          count > 0 && ( // N'affiche que les valeurs qui ont reçu des votes
-                            <li key={`${phase}-count-${val}`} style={{ marginBottom: 3 }}>
-                              <span style={{ fontWeight: "normal" }}>{val} : </span>
-                              <span style={{ fontWeight: "bold", color: "#6a0dad" }}>
-                                {count} vote{count > 1 ? "s" : ""}
+                          return (
+                            count > 0 && ( // N'affiche que les valeurs qui ont reçu des votes
+                              <li key={`${phase}-count-${val}`} style={{ marginBottom: 3 }}>
+                                <span style={{ fontWeight: "normal" }}>{val} : </span>
+                                <span style={{ fontWeight: "bold", color: "#6a0dad" }}>
+                                  {count} vote{count > 1 ? "s" : ""}
+                                </span>
+                              </li>
+                            )
+                          );
+                        })}
+                      </ul>
+                    </div>
+
+                    {/* Afficher les votes individuels */}
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontWeight: "bold", marginBottom: 5 }}>Détails des votes :</p>
+                      <ul style={{ listStyleType: "none", padding: 0 }}>
+                        {participants.map((participantName) => {
+                          const voteValue = votes[phase]?.[participantName]; // Récupère le vote du participant pour cette phase
+                          return (
+                            <li key={`${phase}-${participantName}`} style={{ marginBottom: 3 }}>
+                              <span style={{ fontWeight: "normal" }}>{participantName} : </span>
+                              <span style={{ color: voteValue !== undefined ? '#333' : 'red', fontWeight: 'bold' }}>
+                                {voteValue !== undefined ? voteValue : "N'a pas voté"}
                               </span>
                             </li>
-                          )
-                        );
-                      })}
-                    </ul>
+                          );
+                        })}
+                      </ul>
+                    </div>
                   </div>
                 </>
               )}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: revealed ? 15 : 0 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: revealed ? 15 : 0, alignItems: "center" }}>
                 {fibonacciValues.map((val) => {
                   const isSelected = votes[phase]?.[pseudo] === val;
-                  // Désactive les boutons si les votes sont terminés pour l'utilisateur
-                  // ou si les estimations sont révélées (pour empêcher de nouveaux votes)
-                  const isDisabled = finishedVoting[pseudo] || revealed;
+                  // MODIFIE ICI : Les boutons sont désactivés SEULEMENT si les estimations sont révélées
+                  const isDisabled = revealed;
                   return (
                     <button
                       key={val}
@@ -373,6 +406,25 @@ export default function PlanningPokerApp() {
                     </button>
                   );
                 })}
+                {/* NOUVEL EMPLACEMENT : Bouton Réinitialiser cette phase */}
+                {admin && (
+                  <button
+                    onClick={() => resetPhaseVotes(phase)}
+                    style={{
+                      padding: "6px 10px",
+                      cursor: "pointer",
+                      backgroundColor: "#f0ad4e", // Orange plus doux
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 4,
+                      marginLeft: 10, // Un peu d'espace par rapport aux chiffres
+                      fontSize: "0.8em",
+                    }}
+                    title="Réinitialiser les votes pour cette phase uniquement"
+                  >
+                    Reset Phase
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -396,31 +448,14 @@ export default function PlanningPokerApp() {
             </button>
           )}
 
+          {/* Section "Gestion des estimations (Admin)" - seulement les actions globales ici */}
           {admin && (
             <div style={{ marginTop: 32, gridColumn: "span 2" }}>
-              <h3>Gestion des estimations (Admin)</h3>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-                {phases.map((phase) => (
-                  <button
-                    key={`reset-${phase}`}
-                    onClick={() => resetVotes(phase)}
-                    style={{
-                      padding: "6px 10px",
-                      cursor: "pointer",
-                      backgroundColor: "#ffc107", // Jaune pour reset de phase
-                      color: "#333",
-                      border: "none",
-                      borderRadius: 4,
-                    }}
-                  >
-                    Réinitialiser "{phase}"
-                  </button>
-                ))}
-              </div>
+              <h3>Gestion globale (Admin)</h3>
               <button
                 onClick={resetAll}
                 style={{
-                  marginTop: 16,
+                  marginTop: 8, // Ajusté la marge
                   padding: "8px 12px",
                   cursor: "pointer",
                   backgroundColor: "#dc3545",
@@ -429,14 +464,8 @@ export default function PlanningPokerApp() {
                   borderRadius: 4,
                 }}
               >
-                Réinitialiser tout
+                Réinitialiser tout (y compris participants)
               </button>
-            </div>
-          )}
-
-          {revealed && ( // Affichage de l'estimation totale si révélée
-            <div style={{ marginTop: 24, fontWeight: "bold", gridColumn: "span 2", fontSize: "1.2em", color: "#28a745" }}>
-              Estimation totale : {totalEstimate()}
             </div>
           )}
         </div>
