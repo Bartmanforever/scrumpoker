@@ -385,7 +385,7 @@ export default function PlanningPokerApp() {
             flex: "2 1 0%",
             boxSizing: "border-box",
             display: "grid",
-            // Ajustement des colonnes de grille : 2 pour l'admin, 1 pour les votants
+            // Ajustement des colonnes de grille : 2 pour l'admin, 'auto 1fr' pour les votants
             gridTemplateColumns: admin ? "1fr 1fr" : "auto 1fr", 
             gap: 24,
           }}
@@ -439,29 +439,32 @@ export default function PlanningPokerApp() {
                 <h3>{phase}</h3>
                 
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-                  {fibonacciValues.map((val) => {
-                    const isSelected = votes[phase]?.[pseudo] === val;
-                    // Les boutons sont désactivés SEULEMENT si les estimations sont révélées
-                    const isDisabled = revealed; 
-                    return (
-                      <button
-                        key={val}
-                        onClick={() => handleVote(phase, val)}
-                        disabled={isDisabled}
-                        style={{
-                          padding: "8px 12px",
-                          borderRadius: 4,
-                          border: isSelected ? "2px solid #007bff" : "1px solid #ccc",
-                          backgroundColor: isSelected ? "#cce5ff" : "#fff",
-                          cursor: isDisabled ? "not-allowed" : "pointer",
-                          opacity: isDisabled ? 0.7 : 1,
-                        }}
-                        title={sortedFibonacciLabels.find(([v,d]) => parseFloat(v) === val)?.[1] || ""} // Utilise les labels triés
-                      >
-                        {val}
-                      </button>
-                    );
-                  })}
+                  {
+                    // Masque les boutons de vote Fibonacci si l'utilisateur est admin
+                    !admin && fibonacciValues.map((val) => {
+                      const isSelected = votes[phase]?.[pseudo] === val;
+                      // Les boutons sont désactivés SEULEMENT si les estimations sont révélées
+                      const isDisabled = revealed; 
+                      return (
+                        <button
+                          key={val}
+                          onClick={() => handleVote(phase, val)}
+                          disabled={isDisabled}
+                          style={{
+                            padding: "8px 12px",
+                            borderRadius: 4,
+                            border: isSelected ? "2px solid #007bff" : "1px solid #ccc",
+                            backgroundColor: isSelected ? "#cce5ff" : "#fff",
+                            cursor: isDisabled ? "not-allowed" : "pointer",
+                            opacity: isDisabled ? 0.7 : 1,
+                          }}
+                          title={sortedFibonacciLabels.find(([v,d]) => parseFloat(v) === val)?.[1] || ""} // Utilise les labels triés
+                        >
+                          {val}
+                        </button>
+                      );
+                    })
+                  }
                   {admin && (
                     <button
                       onClick={() => resetPhaseVotes(phase)}
