@@ -27,7 +27,8 @@ const phases = [
 ];
 
 const fibonacciValues = [0, 0.5, 1, 2, 3, 5, 8, 13, 20];
-const fibonacciLabels: Record<number, string> = {
+// Tri des labels pour la légende
+const sortedFibonacciLabels = Object.entries({
   0: "peu d'effort, quasi nul",
   0.5: "très simple / trivial",
   1: "travail très rapide",
@@ -37,7 +38,8 @@ const fibonacciLabels: Record<number, string> = {
   8: "travail difficile",
   13: "très complexe, gros effort",
   20: "au-delà du raisonnable",
-};
+}).sort((a, b) => parseFloat(a[0]) - parseFloat(b[0]));
+
 
 export default function PlanningPokerApp() {
   const [pseudo, setPseudo] = useState("");
@@ -123,16 +125,13 @@ export default function PlanningPokerApp() {
 
   const handleVote = async (phase: string, value: number) => {
     if (!pseudo) return;
-    
-    // Si les estimations sont révélées, on ne peut plus voter (admin seul peut revoter via reset)
-    if (revealed) return;
+    if (revealed) return; // Ne pas permettre de voter si c'est révélé
 
     const newVotes = { ...votes };
     if (!newVotes[phase]) newVotes[phase] = {};
 
     const oldVote = newVotes[phase][pseudo];
 
-    // Permet de désélectionner un vote en cliquant une deuxième fois
     if (oldVote === value) {
       delete newVotes[phase][pseudo];
     } else {
@@ -141,11 +140,7 @@ export default function PlanningPokerApp() {
 
     setVotes(newVotes);
 
-    // Si l'utilisateur avait déjà "terminé" son vote (finishedVoting[pseudo] est true)
-    // et qu'il modifie son vote (newVotes[phase][pseudo] est différent de l'ancien ou de undefined)
-    // ET QUE LES ESTIMATIONS NE SONT PAS ENCORE RÉVÉLÉES
     if (finishedVoting[pseudo] && !revealed) {
-        // Marquer comme modifié et remettre finishedVoting à false pour permettre de re-cliquer "J'ai terminé"
         const newModified = { ...modifiedVoting, [pseudo]: true };
         setModifiedVoting(newModified);
         await saveVotes(newVotes, { ...finishedVoting, [pseudo]: false }, newModified, revealed, participants);
@@ -157,7 +152,7 @@ export default function PlanningPokerApp() {
   const handleFinishEstimation = async () => {
     if (!pseudo) return;
     const newFinished = { ...finishedVoting, [pseudo]: true };
-    const newModified = { ...modifiedVoting, [pseudo]: false }; // Réinitialise l'état "modifié" quand l'utilisateur re-valide
+    const newModified = { ...modifiedVoting, [pseudo]: false };
     setFinishedVoting(newFinished);
     setModifiedVoting(newModified);
     await saveVotes(votes, newFinished, newModified, revealed, participants);
@@ -167,21 +162,12 @@ export default function PlanningPokerApp() {
     const newVotes = { ...votes };
     delete newVotes[phase]; // Efface tous les votes pour cette phase
     
-    // Réinitialiser l'état 'finishedVoting' et 'modifiedVoting' pour tous les participants
-    // Ceci permet à chacun de revoter sur la phase s'il le souhaite et de re-cliquer "J'ai terminé"
-    // si un vote est manquant pour cette phase.
-    const resetFinishedVoting = { ...finishedVoting };
-    const resetModifiedVoting = { ...modifiedVoting };
-
-    participants.forEach(p => {
-        // On remet le statut à "non terminé" pour ce participant
-        // s'il avait voté pour cette phase ou s'il n'avait pas encore voté
-        // Simplification: le plus simple est de ne pas toucher à finishedVoting[p] ici
-        // car finishedVoting est pour toutes les phases. On ne touche qu'aux votes.
-        // Les boutons sont gérés par 'revealed' et 'finishedVoting[pseudo]' combiné.
-        // Si on efface les votes d'une phase, l'utilisateur voit qu'il n'a plus voté sur cette phase.
-    });
-
+    // Pour que les participants puissent revoter sur cette phase, on peut soit:
+    // 1. Réinitialiser 'finishedVoting[p]' pour chaque p qui avait voté sur cette phase (complexe car finishedVoting est global)
+    // 2. Simplifier : Remettre 'revealed' à false et laisser les utilisateurs revoter (plus simple à gérer globalement)
+    // 3. Laisser l'utilisateur voter même si 'finishedVoting[p]' est true, mais le bouton "J'ai terminé" doit réapparaître
+    // On opte pour la 2ème solution combinée avec le comportement de modification de vote.
+    // Quand une phase est reset, on cache les estimations et on permet de revoter.
     setVotes(newVotes);
     setRevealed(false); // Quand on reset une phase, on "cache" les estimations globales
     await saveVotes(newVotes, finishedVoting, modifiedVoting, false, participants);
@@ -189,9 +175,9 @@ export default function PlanningPokerApp() {
 
   const resetAllVotesKeepParticipants = async () => {
     setVotes({});
-    setFinishedVoting({}); // Réinitialise tous les "terminé"
-    setModifiedVoting({}); // Réinitialise tous les "modifié"
-    setRevealed(false); // Cache les estimations
+    setFinishedVoting({});
+    setModifiedVoting({});
+    setRevealed(false);
     await saveVotes({}, {}, {}, false, participants);
   };
 
@@ -220,6 +206,19 @@ export default function PlanningPokerApp() {
     return phases
       .reduce((acc, phase) => acc + calculateAverage(votes[phase]), 0)
       .toFixed(2);
+  };
+
+  // Calcule le total des votes du pseudo courant
+  const calculatePersonalTotal = () => {
+    if (!pseudo) return 0;
+    let personalSum = 0;
+    phases.forEach(phase => {
+        const vote = votes[phase]?.[pseudo];
+        if (vote !== undefined) {
+            personalSum += vote;
+        }
+    });
+    return personalSum.toFixed(2);
   };
 
   const isLoggedIn = (userValidated && pseudo.trim() !== "") || admin;
@@ -291,7 +290,7 @@ export default function PlanningPokerApp() {
             </button>
             {revealed && (
               <div style={{ fontWeight: "bold", fontSize: "1.2em", color: "#28a745", marginBottom: 16 }}>
-                Estimation totale : {totalEstimate()}
+                Estimation totale (groupe) : {totalEstimate()}
               </div>
             )}
           </div>
@@ -371,23 +370,75 @@ export default function PlanningPokerApp() {
             position: "relative", // Pour positionner la légende en bas à droite
           }}
         >
+          {/* Section affichage total votant / total groupe pour les votants */}
+          {userValidated && (
+            <div style={{ gridColumn: "span 2", borderBottom: "1px dashed #eee", paddingBottom: 15, marginBottom: 15 }}>
+              {finishedVoting[pseudo] && ( // N'affiche le total personnel que si l'utilisateur a cliqué "J'ai terminé"
+                <p style={{ fontWeight: "bold", fontSize: "1.1em", color: "#007bff", marginBottom: 8 }}>
+                  Votre estimation totale : {calculatePersonalTotal()}
+                </p>
+              )}
+              {revealed && ( // N'affiche le total groupe que si c'est révélé
+                <p style={{ fontWeight: "bold", fontSize: "1.1em", color: "#28a745" }}>
+                  Estimation totale du groupe : {totalEstimate()}
+                </p>
+              )}
+            </div>
+          )}
+
           {phases.map((phase) => (
             <div key={phase} style={{ marginBottom: 24 }}>
               <h3>{phase}</h3>
-              {/* Affichage de l'estimation du participant (votre vote) */}
-              {pseudo && (
-                <p style={{ margin: "5px 0", fontSize: "0.9em", color: "#6c757d" }}>
-                  Votre vote :{" "}
-                  <span style={{ fontWeight: "bold", color: votes[phase]?.[pseudo] !== undefined ? '#007bff' : 'gray' }}>
-                    {votes[phase]?.[pseudo] !== undefined ? votes[phase][pseudo] : "Non voté"}
-                  </span>
-                </p>
-              )}
-              {revealed && (
+              
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                {fibonacciValues.map((val) => {
+                  const isSelected = votes[phase]?.[pseudo] === val;
+                  // Les boutons sont désactivés SEULEMENT si les estimations sont révélées
+                  const isDisabled = revealed; 
+                  return (
+                    <button
+                      key={val}
+                      onClick={() => handleVote(phase, val)}
+                      disabled={isDisabled}
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: 4,
+                        border: isSelected ? "2px solid #007bff" : "1px solid #ccc",
+                        backgroundColor: isSelected ? "#cce5ff" : "#fff",
+                        cursor: isDisabled ? "not-allowed" : "pointer",
+                        opacity: isDisabled ? 0.7 : 1,
+                      }}
+                      title={sortedFibonacciLabels.find(([v,d]) => parseFloat(v) === val)?.[1] || ""} // Utilise les labels triés
+                    >
+                      {val}
+                    </button>
+                  );
+                })}
+                {admin && (
+                  <button
+                    onClick={() => resetPhaseVotes(phase)}
+                    style={{
+                      padding: "6px 10px",
+                      cursor: "pointer",
+                      backgroundColor: "#f0ad4e",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 4,
+                      marginLeft: 10,
+                      fontSize: "0.8em",
+                    }}
+                    title="Réinitialiser les votes pour cette phase uniquement"
+                  >
+                    Reset Phase
+                  </button>
+                )}
+              </div>
+
+              {revealed && ( // Affichage des détails par phase pour tous (votants et admin)
                 <>
-                  {/* Affichage de l'estimation de groupe (moyenne) */}
+                  {/* Affichage de l'estimation de groupe (moyenne par phase) */}
                   <p style={{ fontWeight: "bold", margin: "8px 0", color: "#0056b3" }}>
-                    Moyenne groupe : {calculateAverage(votes[phase]).toFixed(2)}
+                    Moyenne groupe (cette phase) : {calculateAverage(votes[phase]).toFixed(2)}
                   </p>
                   <div style={{ display: "flex", gap: 15, marginTop: 10, borderTop: "1px dashed #eee", paddingTop: 10 }}>
                     <div style={{ flex: 1, minWidth: "120px" }}>
@@ -432,49 +483,6 @@ export default function PlanningPokerApp() {
                   </div>
                 </>
               )}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: revealed ? 15 : 0, alignItems: "center" }}>
-                {fibonacciValues.map((val) => {
-                  const isSelected = votes[phase]?.[pseudo] === val;
-                  // Les boutons sont désactivés SEULEMENT si les estimations sont révélées
-                  const isDisabled = revealed; // L'utilisateur ne peut plus voter si c'est révélé
-                  return (
-                    <button
-                      key={val}
-                      onClick={() => handleVote(phase, val)}
-                      disabled={isDisabled}
-                      style={{
-                        padding: "8px 12px",
-                        borderRadius: 4,
-                        border: isSelected ? "2px solid #007bff" : "1px solid #ccc",
-                        backgroundColor: isSelected ? "#cce5ff" : "#fff",
-                        cursor: isDisabled ? "not-allowed" : "pointer",
-                        opacity: isDisabled ? 0.7 : 1,
-                      }}
-                      title={fibonacciLabels[val]}
-                    >
-                      {val}
-                    </button>
-                  );
-                })}
-                {admin && (
-                  <button
-                    onClick={() => resetPhaseVotes(phase)}
-                    style={{
-                      padding: "6px 10px",
-                      cursor: "pointer",
-                      backgroundColor: "#f0ad4e",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: 4,
-                      marginLeft: 10,
-                      fontSize: "0.8em",
-                    }}
-                    title="Réinitialiser les votes pour cette phase uniquement"
-                  >
-                    Reset Phase
-                  </button>
-                )}
-              </div>
             </div>
           ))}
 
@@ -499,7 +507,7 @@ export default function PlanningPokerApp() {
             </button>
           )}
 
-          {/* Légende des valeurs Fibonacci */}
+          {/* Légende des valeurs Fibonacci (en bas à droite, format paysage) */}
           <div
             style={{
               position: "absolute",
@@ -510,17 +518,20 @@ export default function PlanningPokerApp() {
               padding: 12,
               backgroundColor: "#f9f9f9",
               boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
+              display: "flex", // Pour l'affichage paysage
+              flexWrap: "wrap", // Permet le retour à la ligne si pas assez de place
+              gap: "8px 15px", // Espacement entre les éléments
+              maxWidth: "50%", // Limite la largeur pour ne pas prendre toute la zone
+              alignItems: "flex-start",
             }}
           >
-            <h4 style={{ margin: "0 0 10px 0", color: "#555" }}>Légende des valeurs :</h4>
-            <ul style={{ listStyleType: "none", padding: 0, margin: 0 }}>
-              {Object.entries(fibonacciLabels).map(([value, description]) => (
-                <li key={value} style={{ marginBottom: 4 }}>
-                  <span style={{ fontWeight: "bold", color: "#333" }}>{value} : </span>
-                  <span style={{ color: "#666", fontSize: "0.9em" }}>{description}</span>
-                </li>
-              ))}
-            </ul>
+            <h4 style={{ margin: "0", color: "#555", width: "100%", marginBottom: 10 }}>Légende des valeurs :</h4>
+            {sortedFibonacciLabels.map(([value, description]) => (
+              <div key={value} style={{ flexBasis: "calc(50% - 15px)", minWidth: "150px" }}> {/* Chaque élément prend environ la moitié de la largeur */}
+                <span style={{ fontWeight: "bold", color: "#333" }}>{value} : </span>
+                <span style={{ color: "#666", fontSize: "0.9em" }}>{description}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
