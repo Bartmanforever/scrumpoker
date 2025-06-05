@@ -66,12 +66,7 @@ export default function PlanningPokerApp() {
         }
       } else {
         // Le document n'existe pas encore, initialise un état vide
-        setVotes({});
-        setFinishedVoting({});
-        setRevealed(false);
-        setParticipants([]);
-        // Initialise le document dans Firestore si ce n'est pas déjà fait
-        // C'est une bonne pratique pour s'assurer que le document existe
+        // Puis initialise le document dans Firestore si ce n'est pas déjà fait
         setDoc(votesDoc, {
           votes: {},
           finishedVoting: {},
@@ -81,7 +76,7 @@ export default function PlanningPokerApp() {
       }
     });
     return () => unsubscribeVotes();
-  }, [pseudo]); // Ajout de 'pseudo' dans les dépendances pour re-vérifier 'userValidated' si le pseudo change
+  }, [pseudo]);
 
   // Fonction pour sauvegarder les données dans Firebase
   const saveVotes = async (
@@ -273,11 +268,30 @@ export default function PlanningPokerApp() {
             <div key={phase} style={{ marginBottom: 24 }}>
               <h3>{phase}</h3>
               {revealed && ( // Affichage de la moyenne par phase si révélée
-                <p style={{ fontWeight: "bold", margin: "8px 0", color: "#0056b3" }}>
-                  Moyenne : {calculateAverage(votes[phase]).toFixed(2)}
-                </p>
+                <>
+                  <p style={{ fontWeight: "bold", margin: "8px 0", color: "#0056b3" }}>
+                    Moyenne : {calculateAverage(votes[phase]).toFixed(2)}
+                  </p>
+                  {/* NOUVELLE LOGIQUE : Afficher les votes individuels */}
+                  <div style={{ marginTop: 10, borderTop: "1px dashed #eee", paddingTop: 10 }}>
+                    <p style={{ fontWeight: "bold", marginBottom: 5 }}>Détails des votes :</p>
+                    <ul style={{ listStyleType: "none", padding: 0 }}>
+                      {participants.map((participantName) => {
+                        const voteValue = votes[phase]?.[participantName];
+                        return (
+                          <li key={`${phase}-${participantName}`} style={{ marginBottom: 3 }}>
+                            <span style={{ fontWeight: "normal" }}>{participantName} : </span>
+                            <span style={{ color: voteValue !== undefined ? '#333' : 'red', fontWeight: 'bold' }}>
+                              {voteValue !== undefined ? voteValue : "N'a pas voté"}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                </>
               )}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: revealed ? 15 : 0 }}>
                 {fibonacciValues.map((val) => {
                   const isSelected = votes[phase]?.[pseudo] === val;
                   // Désactive les boutons si les votes sont terminés pour l'utilisateur
