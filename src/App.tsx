@@ -9,7 +9,7 @@ const firebaseConfig = {
   projectId: "scrum-poker-e6a75",
   storageBucket: "scrum-poker-e6a75.appspot.com",
   messagingSenderId: "651144070000", // Exemple, utilisez le vôtre
-  appId: "1:651144070000:web:123456789abcdef", // Exemple, utilisez le vôme
+  appId: "1:651144070000:web:123456789abcdef", // Exemple, utilisez le vôtre
 };
 
 // Initialize Firebase & Firestore
@@ -240,6 +240,7 @@ export default function PlanningPokerApp() {
         flexWrap: "wrap",
         gap: 16,
         padding: 16,
+        justifyContent: "center", // Centre l'ensemble du contenu horizontalement
       }}
     >
       {/* Zone de login et admin */}
@@ -248,8 +249,13 @@ export default function PlanningPokerApp() {
           border: "1px solid #ddd",
           padding: 16,
           borderRadius: 8,
-          flex: "1 1 0%",
+          flex: "1 1 0%", // Prend la largeur restante, mais peut se réduire
+          maxWidth: userValidated ? "350px" : "400px", // Réduit la largeur max quand l'utilisateur est connecté
           boxSizing: "border-box",
+          margin: userValidated ? "0" : "auto", // Centre la boîte de login au début
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center", // Centre les éléments enfants dans la boîte de login
         }}
       >
         <p>Entrez votre pseudo pour voter :</p>
@@ -258,12 +264,12 @@ export default function PlanningPokerApp() {
           value={pseudo}
           onChange={(e) => setPseudo(e.target.value)}
           disabled={userValidated}
-          style={{ width: "100%", padding: 8, marginBottom: 8, boxSizing: "border-box" }}
+          style={{ width: "80%", padding: 8, marginBottom: 8, boxSizing: "border-box", textAlign: "center" }} // Réduit la largeur et centre le texte
         />
         <button
           onClick={handleUserValidation}
           disabled={!pseudo.trim() || userValidated}
-          style={{ width: "100%", padding: 8, marginBottom: 24, cursor: "pointer" }}
+          style={{ width: "80%", padding: 8, marginBottom: 24, cursor: "pointer" }} // Réduit la largeur
         >
           Valider
         </button>
@@ -275,14 +281,14 @@ export default function PlanningPokerApp() {
           value={adminPassword}
           onChange={(e) => setAdminPassword(e.target.value)}
           onKeyDown={handleLogin}
-          style={{ width: "100%", padding: 8, boxSizing: "border-box", marginBottom: 8 }}
+          style={{ width: "80%", padding: 8, boxSizing: "border-box", marginBottom: 8, textAlign: "center" }} // Réduit la largeur et centre le texte
         />
         {admin && (
           <p style={{ color: "green", marginTop: 8 }}>Connecté en tant qu'administrateur</p>
         )}
 
         {admin && (
-            <div style={{ marginTop: 24 }}>
+            <div style={{ marginTop: 24, width: "100%", textAlign: "center" }}> {/* Centre le contenu admin */}
               <h3>Participants connectés</h3>
               {participants.length > 0 ? (
                   <ul style={{ listStyleType: "none", padding: 0 }}>
@@ -444,106 +450,112 @@ export default function PlanningPokerApp() {
           )}
 
           <div style={{ gridColumn: admin ? "auto" : "2 / span 1" }}> {/* Les phases pour les votants sont dans la 2ème colonne si la légende est présente */}
-            {phases.map((phase) => (
-              <div key={phase} style={{ marginBottom: 24 }}>
-                <h3>{phase}</h3>
-                
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-                  {
-                    // Masque les boutons de vote Fibonacci si l'utilisateur est admin
-                    !admin && fibonacciValues.map((val) => {
-                      const isSelected = votes[phase]?.[pseudo] === val;
-                      // Les boutons sont désactivés SEULEMENT si les estimations sont révélées
-                      const isDisabled = revealed; 
-                      return (
-                        <button
-                          key={val}
-                          onClick={() => handleVote(phase, val)}
-                          disabled={isDisabled}
-                          style={{
-                            padding: "8px 12px",
-                            borderRadius: 4,
-                            border: isSelected ? "2px solid #007bff" : "1px solid #ccc",
-                            backgroundColor: isSelected ? "#cce5ff" : "#fff",
-                            cursor: isDisabled ? "not-allowed" : "pointer",
-                            opacity: isDisabled ? 0.7 : 1,
-                          }}
-                          title={sortedFibonacciLabels.find(([v,d]) => parseFloat(v) === val)?.[1] || ""} // Utilise les labels triés
-                        >
-                          {val}
-                        </button>
-                      );
-                    })
-                  }
-                  {admin && (
-                    <button
-                      onClick={() => resetPhaseVotes(phase)}
-                      style={{
-                        padding: "6px 10px",
-                        cursor: "pointer",
-                        backgroundColor: "#f0ad4e",
-                        color: "#fff",
-                        border: "none",
-                        borderRadius: 4,
-                        marginLeft: 10,
-                        fontSize: "0.8em",
-                      }}
-                      title="Réinitialiser les votes pour cette phase uniquement"
-                    >
-                      Reset Phase
-                    </button>
-                  )}
-                </div>
+            {phases.map((phase, index) => ( // Ajout de l'index pour la séparation
+              <React.Fragment key={phase}> {/* Utilisation de Fragment pour la clé */}
+                <div style={{ marginBottom: 24 }}>
+                  <h3>{phase}</h3>
+                  
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                    {
+                      // Masque les boutons de vote Fibonacci si l'utilisateur est admin
+                      !admin && fibonacciValues.map((val) => {
+                        const isSelected = votes[phase]?.[pseudo] === val;
+                        // Les boutons sont désactivés SEULEMENT si les estimations sont révélées
+                        const isDisabled = revealed; 
+                        return (
+                          <button
+                            key={val}
+                            onClick={() => handleVote(phase, val)}
+                            disabled={isDisabled}
+                            style={{
+                              padding: "8px 12px",
+                              borderRadius: 4,
+                              border: isSelected ? "2px solid #007bff" : "1px solid #ccc",
+                              backgroundColor: isSelected ? "#cce5ff" : "#fff",
+                              cursor: isDisabled ? "not-allowed" : "pointer",
+                              opacity: isDisabled ? 0.7 : 1,
+                            }}
+                            title={sortedFibonacciLabels.find(([v,d]) => parseFloat(v) === val)?.[1] || ""} // Utilise les labels triés
+                          >
+                            {val}
+                          </button>
+                        );
+                      })
+                    }
+                    {admin && (
+                      <button
+                        onClick={() => resetPhaseVotes(phase)}
+                        style={{
+                          padding: "6px 10px",
+                          cursor: "pointer",
+                          backgroundColor: "#f0ad4e",
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: 4,
+                          marginLeft: 10,
+                          fontSize: "0.8em",
+                        }}
+                        title="Réinitialiser les votes pour cette phase uniquement"
+                      >
+                        Reset Phase
+                      </button>
+                    )}
+                  </div>
 
-                {revealed && ( // Affichage des détails par phase pour tous (votants et admin)
-                  <>
-                    <p style={{ fontWeight: "bold", margin: "8px 0", color: "#0056b3" }}>
-                      Moyenne du groupe : {calculateAverage(votes[phase]).toFixed(2)}
-                    </p>
-                    <div style={{ display: "flex", gap: 15, marginTop: 10, borderTop: "1px dashed #eee", paddingTop: 10 }}>
-                      <div style={{ flex: 1, minWidth: "120px" }}>
-                        <p style={{ fontWeight: "bold", marginBottom: 5 }}>Votes par valeur :</p>
-                        <ul style={{ listStyleType: "none", padding: 0 }}>
-                          {fibonacciValues.map((val) => {
-                            const currentPhaseVotes: Record<string, number> = votes[phase] || {};
-                            const count = Object.values(currentPhaseVotes).filter(
-                              (v) => v === val
-                            ).length;
+                  {revealed && ( // Affichage des détails par phase pour tous (votants et admin)
+                    <>
+                      <p style={{ fontWeight: "bold", margin: "8px 0", color: "#0056b3" }}>
+                        Moyenne du groupe : {calculateAverage(votes[phase]).toFixed(2)}
+                      </p>
+                      <div style={{ display: "flex", gap: 15, marginTop: 10, borderTop: "1px dashed #eee", paddingTop: 10 }}>
+                        <div style={{ flex: 1, minWidth: "120px" }}>
+                          <p style={{ fontWeight: "bold", marginBottom: 5 }}>Votes par valeur :</p>
+                          <ul style={{ listStyleType: "none", padding: 0 }}>
+                            {fibonacciValues.map((val) => {
+                              const currentPhaseVotes: Record<string, number> = votes[phase] || {};
+                              const count = Object.values(currentPhaseVotes).filter(
+                                (v) => v === val
+                              ).length;
 
-                            return (
-                              count > 0 && (
-                                <li key={`${phase}-count-${val}`} style={{ marginBottom: 3 }}>
-                                  <span style={{ fontWeight: "normal" }}>{val} : </span>
-                                  <span style={{ fontWeight: "bold", color: "#6a0dad" }}>
-                                    {count} vote{count > 1 ? "s" : ""}
+                              return (
+                                count > 0 && (
+                                  <li key={`${phase}-count-${val}`} style={{ marginBottom: 3 }}>
+                                    <span style={{ fontWeight: "normal" }}>{val} : </span>
+                                    <span style={{ fontWeight: "bold", color: "#6a0dad" }}>
+                                      {count} vote{count > 1 ? "s" : ""}
+                                    </span>
+                                  </li>
+                                )
+                              );
+                            })}
+                          </ul>
+                        </div>
+
+                        <div style={{ flex: 1 }}>
+                          <p style={{ fontWeight: "bold", marginBottom: 5 }}>Détails des votes :</p>
+                          <ul style={{ listStyleType: "none", padding: 0 }}>
+                            {participants.map((participantName) => {
+                              const voteValue = votes[phase]?.[participantName];
+                              return (
+                                <li key={`${phase}-${participantName}`} style={{ marginBottom: 3 }}>
+                                  <span style={{ fontWeight: "normal" }}>{participantName} : </span>
+                                  <span style={{ color: voteValue !== undefined ? '#333' : 'red', fontWeight: 'bold' }}>
+                                    {voteValue !== undefined ? voteValue : "N'a pas voté"}
                                   </span>
                                 </li>
-                              )
-                            );
-                          })}
-                        </ul>
+                              );
+                            })}
+                          </ul>
+                        </div>
                       </div>
-
-                      <div style={{ flex: 1 }}>
-                        <p style={{ fontWeight: "bold", marginBottom: 5 }}>Détails des votes :</p>
-                        <ul style={{ listStyleType: "none", padding: 0 }}>
-                          {participants.map((participantName) => {
-                            const voteValue = votes[phase]?.[participantName];
-                            return (
-                              <li key={`${phase}-${participantName}`} style={{ marginBottom: 3 }}>
-                                <span style={{ fontWeight: "normal" }}>{participantName} : </span>
-                                <span style={{ color: voteValue !== undefined ? '#333' : 'red', fontWeight: 'bold' }}>
-                                  {voteValue !== undefined ? voteValue : "N'a pas voté"}
-                                </span>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </div>
-                    </div>
-                  </>
+                    </>
+                  )}
+                </div>
+                {/* Barre de séparation pour l'admin, sauf après la dernière phase */}
+                {admin && index < phases.length - 1 && (
+                  <hr style={{ border: "none", borderTop: "1px dashed #ccc", margin: "20px 0" }} />
                 )}
-              </div>
+              </React.Fragment>
             ))}
           </div>
 
