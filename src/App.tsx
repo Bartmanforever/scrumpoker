@@ -66,7 +66,11 @@ export default function PlanningPokerApp() {
         }
       } else {
         // Le document n'existe pas encore, initialise un état vide
-        // Puis initialise le document dans Firestore si ce n'est pas déjà fait
+        setVotes({});
+        setFinishedVoting({});
+        setRevealed(false);
+        setParticipants([]);
+        // Initialise le document dans Firestore si ce n'est pas déjà fait
         setDoc(votesDoc, {
           votes: {},
           finishedVoting: {},
@@ -220,26 +224,57 @@ export default function PlanningPokerApp() {
         </button>
 
         <p style={{ fontWeight: "bold" }}>Espace Admin :</p>
+        {/* MODIFIE ICI : Ajustement du style pour que le champ de mot de passe ne dépasse pas */}
         <input
           type="password"
           placeholder="Mot de passe admin"
           value={adminPassword}
           onChange={(e) => setAdminPassword(e.target.value)}
           onKeyDown={handleLogin}
-          style={{ width: "100%", padding: 8 }}
+          style={{ width: "100%", padding: 8, boxSizing: "border-box" }}
         />
         {admin && (
           <p style={{ color: "green", marginTop: 8 }}>Connecté en tant qu'administrateur</p>
         )}
 
+        {/* NOUVEL EMPLACEMENT : Bouton Révéler les estimations */}
         {admin && (
-            <div style={{ marginTop: 24 }}>
+          <div style={{ marginTop: 24 }}>
+            <button
+              onClick={revealEstimations}
+              disabled={revealed} // Désactive si déjà révélé
+              style={{
+                width: "100%", // Rend le bouton prendre toute la largeur
+                padding: "8px 12px",
+                cursor: "pointer",
+                backgroundColor: "#007bff",
+                color: "#fff",
+                border: "none",
+                borderRadius: 4,
+                marginBottom: 16, // Espace sous le bouton
+              }}
+            >
+              Révéler les estimations
+            </button>
+          </div>
+        )}
+
+        {admin && (
+            <div style={{ marginTop: 10 }}> {/* Ajustement de la marge supérieure */}
                 <h3>Participants connectés</h3>
                 {participants.length > 0 ? (
                     <ul style={{ listStyleType: "none", padding: 0 }}>
                         {participants.map((p) => (
                             <li key={p} style={{ marginBottom: 4 }}>
-                                {p} {finishedVoting[p] && <span style={{ color: "grey", fontSize: "0.9em" }}>(a terminé)</span>}
+                                {p}{" "}
+                                {/* Condition pour afficher le sablier ou l'encoche verte */}
+                                {userValidated && p === pseudo && !finishedVoting[p] ? ( // Si c'est l'utilisateur actuel et qu'il n'a pas terminé
+                                  <span title="Vous n'avez pas encore terminé votre estimation">⏳</span>
+                                ) : finishedVoting[p] ? ( // Si le participant a terminé
+                                  <span title="A terminé son estimation">✅</span>
+                                ) : ( // Si le participant n'a pas terminé (et n'est pas l'utilisateur actuel)
+                                  <span title="N'a pas encore terminé son estimation">⏳</span>
+                                )}
                             </li>
                         ))}
                     </ul>
@@ -272,12 +307,12 @@ export default function PlanningPokerApp() {
                   <p style={{ fontWeight: "bold", margin: "8px 0", color: "#0056b3" }}>
                     Moyenne : {calculateAverage(votes[phase]).toFixed(2)}
                   </p>
-                  {/* NOUVELLE LOGIQUE : Afficher les votes individuels */}
+                  {/* Afficher les votes individuels */}
                   <div style={{ marginTop: 10, borderTop: "1px dashed #eee", paddingTop: 10 }}>
                     <p style={{ fontWeight: "bold", marginBottom: 5 }}>Détails des votes :</p>
                     <ul style={{ listStyleType: "none", padding: 0 }}>
                       {participants.map((participantName) => {
-                        const voteValue = votes[phase]?.[participantName];
+                        const voteValue = votes[phase]?.[participantName]; // Récupère le vote du participant pour cette phase
                         return (
                           <li key={`${phase}-${participantName}`} style={{ marginBottom: 3 }}>
                             <span style={{ fontWeight: "normal" }}>{participantName} : </span>
@@ -285,6 +320,28 @@ export default function PlanningPokerApp() {
                               {voteValue !== undefined ? voteValue : "N'a pas voté"}
                             </span>
                           </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+
+                  {/* NOUVELLE LOGIQUE : Affichage du nombre de votes par valeur */}
+                  <div style={{ marginTop: 15, borderTop: "1px dashed #eee", paddingTop: 10 }}>
+                    <p style={{ fontWeight: "bold", marginBottom: 5 }}>Votes par valeur :</p>
+                    <ul style={{ listStyleType: "none", padding: 0 }}>
+                      {fibonacciValues.map((val) => {
+                        const count = Object.values(votes[phase] || {}).filter(
+                          (v) => v === val
+                        ).length;
+                        return (
+                          count > 0 && ( // N'affiche que les valeurs qui ont reçu des votes
+                            <li key={`${phase}-count-${val}`} style={{ marginBottom: 3 }}>
+                              <span style={{ fontWeight: "normal" }}>{val} : </span>
+                              <span style={{ fontWeight: "bold", color: "#6a0dad" }}>
+                                {count} vote{count > 1 ? "s" : ""}
+                              </span>
+                            </li>
+                          )
                         );
                       })}
                     </ul>
@@ -320,7 +377,7 @@ export default function PlanningPokerApp() {
             </div>
           ))}
 
-          {/* MODIFIE ICI : Le bouton "J'ai terminé l'estimation" n'apparaît que si l'utilisateur est validé et n'a pas fini/révélé */}
+          {/* Le bouton "J'ai terminé l'estimation" n'apparaît que si l'utilisateur est validé et n'a pas fini/révélé */}
           {userValidated && !finishedVoting[pseudo] && !revealed && (
             <button
               onClick={handleFinishEstimation}
@@ -360,22 +417,6 @@ export default function PlanningPokerApp() {
                   </button>
                 ))}
               </div>
-              <button
-                onClick={revealEstimations}
-                disabled={revealed} // Désactive si déjà révélé
-                style={{
-                  marginTop: 16,
-                  padding: "8px 12px",
-                  cursor: "pointer",
-                  backgroundColor: "#007bff",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 4,
-                  marginRight: 8,
-                }}
-              >
-                Révéler les estimations
-              </button>
               <button
                 onClick={resetAll}
                 style={{
