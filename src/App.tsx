@@ -158,18 +158,17 @@ export default function PlanningPokerApp() {
     await saveVotes(votes, newFinished, newModified, revealed, participants);
   };
 
-  const resetPhaseVotes = async (phase: string) => {
+  const resetPhaseVotes = async (phaseToReset: string) => { // Renommé pour plus de clarté
     const newVotes = { ...votes };
-    delete newVotes[phase]; // Efface tous les votes pour cette phase
     
-    // Pour que les participants puissent revoter sur cette phase, on peut soit:
-    // 1. Réinitialiser 'finishedVoting[p]' pour chaque p qui avait voté sur cette phase (complexe car finishedVoting est global)
-    // 2. Simplifier : Remettre 'revealed' à false et laisser les utilisateurs revoter (plus simple à gérer globalement)
-    // 3. Laisser l'utilisateur voter même si 'finishedVoting[p]' est true, mais le bouton "J'ai terminé" doit réapparaître
-    // On opte pour la 2ème solution combinée avec le comportement de modification de vote.
-    // Quand une phase est reset, on cache les estimations et on permet de revoter.
+    // Efface uniquement les votes de la phase spécifiée
+    if (newVotes[phaseToReset]) {
+      delete newVotes[phaseToReset];
+    }
+    
     setVotes(newVotes);
-    setRevealed(false); // Quand on reset une phase, on "cache" les estimations globales
+    // Si les estimations étaient révélées, les cacher à nouveau pour cette phase
+    setRevealed(false); 
     await saveVotes(newVotes, finishedVoting, modifiedVoting, false, participants);
   };
 
@@ -355,7 +354,7 @@ export default function PlanningPokerApp() {
         )}
       </div>
 
-      {/* Zone des votes */}
+      {/* Zone des votes et affichages pour les votants */}
       {isLoggedIn && (
         <div
           style={{
@@ -436,9 +435,8 @@ export default function PlanningPokerApp() {
 
               {revealed && ( // Affichage des détails par phase pour tous (votants et admin)
                 <>
-                  {/* Affichage de l'estimation de groupe (moyenne par phase) */}
                   <p style={{ fontWeight: "bold", margin: "8px 0", color: "#0056b3" }}>
-                    Moyenne groupe (cette phase) : {calculateAverage(votes[phase]).toFixed(2)}
+                    Moyenne du groupe : {calculateAverage(votes[phase]).toFixed(2)}
                   </p>
                   <div style={{ display: "flex", gap: 15, marginTop: 10, borderTop: "1px dashed #eee", paddingTop: 10 }}>
                     <div style={{ flex: 1, minWidth: "120px" }}>
@@ -486,9 +484,7 @@ export default function PlanningPokerApp() {
             </div>
           ))}
 
-          {/* Le bouton "J'ai terminé l'estimation" n'apparaît que si l'utilisateur est validé
-          ET (il n'a pas encore terminé OU il a modifié son vote)
-          ET que les estimations ne sont pas révélées */}
+          {/* Le bouton "J'ai terminé l'estimation" */}
           {userValidated && (!finishedVoting[pseudo] || modifiedVoting[pseudo]) && !revealed && (
             <button
               onClick={handleFinishEstimation}
@@ -500,7 +496,12 @@ export default function PlanningPokerApp() {
                 color: "#fff",
                 border: "none",
                 borderRadius: 4,
-                gridColumn: "span 2",
+                // Ajustements pour la taille et l'alignement
+                width: "auto", // La largeur s'adapte au contenu
+                minWidth: "150px", // Une largeur minimale pour le rendre visible
+                gridColumn: "1 / span 1", // Occupe une seule colonne, aligné à gauche
+                justifySelf: "start", // Aligne à gauche dans la grille
+                marginRight: "auto", // Assure qu'il reste à gauche
               }}
             >
               J'ai terminé l'estimation
@@ -518,16 +519,19 @@ export default function PlanningPokerApp() {
               padding: 12,
               backgroundColor: "#f9f9f9",
               boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
-              display: "flex", // Pour l'affichage paysage
-              flexWrap: "wrap", // Permet le retour à la ligne si pas assez de place
-              gap: "8px 15px", // Espacement entre les éléments
-              maxWidth: "50%", // Limite la largeur pour ne pas prendre toute la zone
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "8px 15px",
+              maxWidth: "50%", // Limite la largeur pour ne pas prendre trop de place
               alignItems: "flex-start",
+              // Pour s'assurer qu'elle ne déborde pas sur le bouton
+              left: "50%", // Commence à 50% de la largeur du parent
+              transform: "translateX(0)", // Aucun décalage
             }}
           >
             <h4 style={{ margin: "0", color: "#555", width: "100%", marginBottom: 10 }}>Légende des valeurs :</h4>
             {sortedFibonacciLabels.map(([value, description]) => (
-              <div key={value} style={{ flexBasis: "calc(50% - 15px)", minWidth: "150px" }}> {/* Chaque élément prend environ la moitié de la largeur */}
+              <div key={value} style={{ flexBasis: "calc(50% - 15px)", minWidth: "150px" }}>
                 <span style={{ fontWeight: "bold", color: "#333" }}>{value} : </span>
                 <span style={{ color: "#666", fontSize: "0.9em" }}>{description}</span>
               </div>
