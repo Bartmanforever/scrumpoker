@@ -45,7 +45,10 @@ export default function PlanningPokerApp() {
   const [admin, setAdmin] = useState(false);
   const [userValidated, setUserValidated] = useState(false);
   const [votes, setVotes] = useState<Record<string, Record<string, number>>>({});
+  // État pour savoir si un utilisateur a "terminé" son vote
   const [finishedVoting, setFinishedVoting] = useState<Record<string, boolean>>({});
+  // État pour savoir si un utilisateur a modifié son vote après l'avoir "terminé"
+  const [modifiedVoting, setModifiedVoting] = useState<Record<string, boolean>>({});
   const [revealed, setRevealed] = useState(false);
   const [participants, setParticipants] = useState<string[]>([]);
 
@@ -57,23 +60,22 @@ export default function PlanningPokerApp() {
         const data = docSnap.data();
         setVotes(data.votes || {});
         setFinishedVoting(data.finishedVoting || {});
+        setModifiedVoting(data.modifiedVoting || {}); // Charger l'état de modification
         setRevealed(data.revealed || false);
         setParticipants(data.participants || []);
-        // Si le pseudo actuel est dans les participants, marquez comme validé
-        // Utile si l'utilisateur rafraîchit la page et que son pseudo était déjà enregistré
         if (pseudo && data.participants && data.participants.includes(pseudo)) {
             setUserValidated(true);
         }
       } else {
-        // Le document n'existe pas encore, initialise un état vide
         setVotes({});
         setFinishedVoting({});
+        setModifiedVoting({});
         setRevealed(false);
         setParticipants([]);
-        // Initialise le document dans Firestore si ce n'est pas déjà fait
         setDoc(votesDoc, {
           votes: {},
           finishedVoting: {},
+          modifiedVoting: {}, // Initialiser le champ
           revealed: false,
           participants: []
         }, { merge: true });
@@ -86,6 +88,7 @@ export default function PlanningPokerApp() {
   const saveVotes = async (
     newVotes: typeof votes,
     newFinished = finishedVoting,
+    newModified = modifiedVoting, // Ajout de newModified
     newRevealed = revealed,
     newParticipants = participants
   ) => {
@@ -95,6 +98,7 @@ export default function PlanningPokerApp() {
       {
         votes: newVotes,
         finishedVoting: newFinished,
+        modifiedVoting: newModified, // Sauvegarder l'état de modification
         revealed: newRevealed,
         participants: newParticipants,
       },
@@ -102,83 +106,104 @@ export default function PlanningPokerApp() {
     );
   };
 
-  // Gère la validation du pseudo utilisateur
   const handleUserValidation = async () => {
     if (!pseudo.trim()) return;
     setUserValidated(true);
     if (!participants.includes(pseudo)) {
       const newParticipants = [...participants, pseudo];
       setParticipants(newParticipants);
-      await saveVotes(votes, finishedVoting, revealed, newParticipants);
+      await saveVotes(votes, finishedVoting, modifiedVoting, revealed, newParticipants);
     }
   };
 
-  // Gère la connexion administrateur via le mot de passe
   const handleLogin = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && adminPassword === "adminpass") {
       setAdmin(true);
-      setAdminPassword(""); // Efface le mot de passe après connexion
+      setAdminPassword("");
     }
   };
 
-  // Gère le vote de l'utilisateur pour une phase donnée
   const handleVote = async (phase: string, value: number) => {
     if (!pseudo) return;
     const newVotes = { ...votes };
     if (!newVotes[phase]) newVotes[phase] = {};
 
+    const oldVote = newVotes[phase][pseudo];
+
     // Permet de désélectionner un vote en cliquant une deuxième fois
-    if (newVotes[phase][pseudo] === value) {
+    if (oldVote === value) {
       delete newVotes[phase][pseudo];
     } else {
       newVotes[phase][pseudo] = value;
     }
 
     setVotes(newVotes);
-    await saveVotes(newVotes);
+
+    // Si l'utilisateur avait déjà "terminé" son vote et qu'il le modifie AVANT révélation
+    if (finishedVoting[pseudo] && !revealed) {
+        const newModified = { ...modifiedVoting, [pseudo]: true };
+        setModifiedVoting(newModified);
+        await saveVotes(newVotes, { ...finishedVoting, [pseudo]: false }, newModified, revealed, participants); // Revert finished state to false
+    } else {
+        await saveVotes(newVotes, finishedVoting, modifiedVoting, revealed, participants);
+    }
   };
 
-  // Gère la fin d'estimation pour un utilisateur
   const handleFinishEstimation = async () => {
     if (!pseudo) return;
     const newFinished = { ...finishedVoting, [pseudo]: true };
+    const newModified = { ...modifiedVoting, [pseudo]: false }; // Réinitialise l'état "modifié" quand l'utilisateur re-valide
     setFinishedVoting(newFinished);
-    await saveVotes(votes, newFinished);
+    setModifiedVoting(newModified);
+    await saveVotes(votes, newFinished, newModified, revealed, participants);
   };
 
-  // Réinitialise les votes pour une phase spécifique (Admin)
-  const resetPhaseVotes = async (phase: string) => { // Renommé pour plus de clarté
+  const resetPhaseVotes = async (phase: string) => {
     const newVotes = { ...votes };
     delete newVotes[phase];
+    // Réinitialise l'état "finishedVoting" et "modifiedVoting" pour cette phase
+    const newFinished = { ...finishedVoting };
+    const newModified = { ...modifiedVoting };
+    
+    // Pour chaque participant, si le vote pour cette phase est réinitialisé, on le marque comme non-terminé ou non-modifié
+    participants.forEach(p => {
+        // Si le participant avait voté pour cette phase, son état "terminé" pourrait être remis à false
+        // pour cette phase, mais il faut gérer l'ensemble des phases pour l'état global finishedVoting[p]
+        // Pour l'instant, on se contente de réinitialiser le vote et de ne pas toucher à finishedVoting[p]
+        // à moins qu'on veuille une gestion par phase du "terminé"
+        // Simplification : si on reset une phase, les participants peuvent revoter dessus sans perdre leur "terminé" global
+        // Le plus simple est de ne pas toucher à finishedVoting[p] ici.
+        // C'est le clic sur "J'ai terminé" qui valide l'état global.
+    });
+
     setVotes(newVotes);
-    await saveVotes(newVotes);
+    await saveVotes(newVotes, finishedVoting, modifiedVoting, revealed, participants);
   };
 
-  // Nouveau bouton: Réinitialise TOUS les votes, mais garde les participants
   const resetAllVotesKeepParticipants = async () => {
-    setVotes({}); // Efface tous les votes
-    setFinishedVoting({}); // Réinitialise l'état "terminé" pour tous
-    setRevealed(false); // Cache les estimations
-    // participants reste inchangé
-    await saveVotes({}, {}, false, participants); // Sauvegarde l'état
+    setVotes({});
+    setFinishedVoting({});
+    setModifiedVoting({}); // Réinitialise aussi l'état modifié
+    setRevealed(false);
+    await saveVotes({}, {}, {}, false, participants); // Les participants restent
   };
 
-  // Réinitialise toutes les données de l'application (Admin)
   const resetAll = async () => {
     setVotes({});
     setFinishedVoting({});
+    setModifiedVoting({}); // Réinitialise aussi l'état modifié
     setRevealed(false);
     setParticipants([]);
-    await saveVotes({}, {}, false, []);
+    await saveVotes({}, {}, {}, false, []);
   };
 
-  // Révèle les estimations pour tous (Admin)
   const revealEstimations = async () => {
     setRevealed(true);
-    await saveVotes(votes, finishedVoting, true, participants);
+    // Le simple fait de définir setRevealed(true) et de sauvegarder déclenchera
+    // la re-rendu et les calculs seront basés sur les votes actuels dans Firebase.
+    await saveVotes(votes, finishedVoting, modifiedVoting, true, participants);
   };
 
-  // Calcule la moyenne des votes pour une phase
   const calculateAverage = (phaseVotes: Record<string, number> | undefined) => {
     if (!phaseVotes) return 0;
     const values = Object.values(phaseVotes);
@@ -186,14 +211,12 @@ export default function PlanningPokerApp() {
     return values.reduce((acc, val) => acc + val, 0) / values.length;
   };
 
-  // Calcule l'estimation totale (somme des moyennes par phase)
   const totalEstimate = () => {
     return phases
       .reduce((acc, phase) => acc + calculateAverage(votes[phase]), 0)
       .toFixed(2);
   };
 
-  // Vérifie si l'utilisateur est connecté (validé ou admin)
   const isLoggedIn = (userValidated && pseudo.trim() !== "") || admin;
 
   return (
@@ -220,12 +243,11 @@ export default function PlanningPokerApp() {
           placeholder="Pseudo"
           value={pseudo}
           onChange={(e) => setPseudo(e.target.value)}
-          disabled={userValidated} // L'input est désactivé SEULEMENT si userValidated est true
+          disabled={userValidated}
           style={{ width: "100%", padding: 8, marginBottom: 8, boxSizing: "border-box" }}
         />
         <button
           onClick={handleUserValidation}
-          // Le bouton est désactivé SEULEMENT si pas de pseudo ou userValidated est true
           disabled={!pseudo.trim() || userValidated}
           style={{ width: "100%", padding: 8, marginBottom: 24, cursor: "pointer" }}
         >
@@ -233,7 +255,6 @@ export default function PlanningPokerApp() {
         </button>
 
         <p style={{ fontWeight: "bold" }}>Espace Admin :</p>
-        {/* MODIFIE ICI : Ajustement du style pour que le champ de mot de passe ne dépasse pas */}
         <input
           type="password"
           placeholder="Mot de passe admin"
@@ -246,25 +267,24 @@ export default function PlanningPokerApp() {
           <p style={{ color: "green", marginTop: 8 }}>Connecté en tant qu'administrateur</p>
         )}
 
-        {/* NOUVEL EMPLACEMENT : Bouton Révéler les estimations + Estimation totale */}
         {admin && (
           <div style={{ marginTop: 24 }}>
             <button
               onClick={revealEstimations}
               style={{
-                width: "100%", // Rend le bouton prendre toute la largeur
+                width: "100%",
                 padding: "8px 12px",
                 cursor: "pointer",
                 backgroundColor: "#007bff",
                 color: "#fff",
                 border: "none",
                 borderRadius: 4,
-                marginBottom: 8, // Espace sous le bouton
+                marginBottom: 8,
               }}
             >
               Révéler les estimations
             </button>
-            {revealed && ( // Affichage de l'estimation totale si révélée
+            {revealed && (
               <div style={{ fontWeight: "bold", fontSize: "1.2em", color: "#28a745", marginBottom: 16 }}>
                 Estimation totale : {totalEstimate()}
               </div>
@@ -273,18 +293,20 @@ export default function PlanningPokerApp() {
         )}
 
         {admin && (
-            <div style={{ marginTop: revealed ? 10 : 24 }}> {/* Ajustement de la marge supérieure */}
+            <div style={{ marginTop: revealed ? 10 : 24 }}>
                 <h3>Participants connectés</h3>
                 {participants.length > 0 ? (
                     <ul style={{ listStyleType: "none", padding: 0 }}>
                         {participants.map((p) => (
                             <li key={p} style={{ marginBottom: 4 }}>
                                 {p}{" "}
-                                {/* Condition pour afficher le sablier ou l'encoche verte */}
-                                {finishedVoting[p] ? ( // Si le participant a terminé
-                                  <span title="A terminé son estimation">✅</span>
-                                ) : ( // Si le participant n'a pas terminé
-                                  <span title="N'a pas encore terminé son estimation">⏳</span>
+                                {/* Affichage des icônes de statut */}
+                                {modifiedVoting[p] ? (
+                                    <span title="A modifié son estimation">🔄</span>
+                                ) : finishedVoting[p] ? (
+                                    <span title="A terminé son estimation">✅</span>
+                                ) : (
+                                    <span title="N'a pas encore terminé son estimation">⏳</span>
                                 )}
                             </li>
                         ))}
@@ -292,7 +314,7 @@ export default function PlanningPokerApp() {
                 ) : (
                     <p>Aucun participant connecté pour le moment.</p>
                 )}
-                {/* NOUVEAU BOUTON : Réinitialiser tous les votes mais conserver les participants */}
+                {/* NOUVEAU EMPLACEMENT : Bouton Réinitialiser tous les votes mais conserver les participants */}
                 <button
                     onClick={resetAllVotesKeepParticipants}
                     style={{
@@ -305,9 +327,26 @@ export default function PlanningPokerApp() {
                       borderRadius: 4,
                       width: "100%",
                       boxSizing: "border-box",
+                      marginBottom: 10, // Espace sous ce bouton
                     }}
                 >
                     Réinitialiser tous les votes (conserver participants)
+                </button>
+                {/* NOUVEL EMPLACEMENT : Bouton Réinitialiser tout (y compris participants) */}
+                <button
+                  onClick={resetAll}
+                  style={{
+                    padding: "8px 12px",
+                    cursor: "pointer",
+                    backgroundColor: "#dc3545",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 4,
+                    width: "100%",
+                    boxSizing: "border-box",
+                  }}
+                >
+                  Réinitialiser tout (y compris participants)
                 </button>
             </div>
         )}
@@ -330,26 +369,23 @@ export default function PlanningPokerApp() {
           {phases.map((phase) => (
             <div key={phase} style={{ marginBottom: 24 }}>
               <h3>{phase}</h3>
-              {revealed && ( // Affichage de la moyenne par phase si révélée
+              {revealed && (
                 <>
                   <p style={{ fontWeight: "bold", margin: "8px 0", color: "#0056b3" }}>
                     Moyenne : {calculateAverage(votes[phase]).toFixed(2)}
                   </p>
-                  {/* MODIFIE ICI : Flexbox pour côte à côte */}
                   <div style={{ display: "flex", gap: 15, marginTop: 10, borderTop: "1px dashed #eee", paddingTop: 10 }}>
-                    {/* NOUVELLE LOGIQUE : Affichage du nombre de votes par valeur */}
-                    <div style={{ flex: 1, minWidth: "120px" }}> {/* Ajout de minWidth pour éviter un écrasement trop fort */}
+                    <div style={{ flex: 1, minWidth: "120px" }}>
                       <p style={{ fontWeight: "bold", marginBottom: 5 }}>Votes par valeur :</p>
                       <ul style={{ listStyleType: "none", padding: 0 }}>
                         {fibonacciValues.map((val) => {
-                          // CORRECTION DE L'ERREUR ICI :
-                          const currentPhaseVotes: Record<string, number> = votes[phase] || {}; // <-- Ligne corrigée
+                          const currentPhaseVotes: Record<string, number> = votes[phase] || {};
                           const count = Object.values(currentPhaseVotes).filter(
                             (v) => v === val
                           ).length;
 
                           return (
-                            count > 0 && ( // N'affiche que les valeurs qui ont reçu des votes
+                            count > 0 && (
                               <li key={`${phase}-count-${val}`} style={{ marginBottom: 3 }}>
                                 <span style={{ fontWeight: "normal" }}>{val} : </span>
                                 <span style={{ fontWeight: "bold", color: "#6a0dad" }}>
@@ -362,12 +398,11 @@ export default function PlanningPokerApp() {
                       </ul>
                     </div>
 
-                    {/* Afficher les votes individuels */}
                     <div style={{ flex: 1 }}>
                       <p style={{ fontWeight: "bold", marginBottom: 5 }}>Détails des votes :</p>
                       <ul style={{ listStyleType: "none", padding: 0 }}>
                         {participants.map((participantName) => {
-                          const voteValue = votes[phase]?.[participantName]; // Récupère le vote du participant pour cette phase
+                          const voteValue = votes[phase]?.[participantName];
                           return (
                             <li key={`${phase}-${participantName}`} style={{ marginBottom: 3 }}>
                               <span style={{ fontWeight: "normal" }}>{participantName} : </span>
@@ -385,7 +420,7 @@ export default function PlanningPokerApp() {
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: revealed ? 15 : 0, alignItems: "center" }}>
                 {fibonacciValues.map((val) => {
                   const isSelected = votes[phase]?.[pseudo] === val;
-                  // MODIFIE ICI : Les boutons sont désactivés SEULEMENT si les estimations sont révélées
+                  // Les boutons sont désactivés SEULEMENT si les estimations sont révélées
                   const isDisabled = revealed;
                   return (
                     <button
@@ -406,18 +441,17 @@ export default function PlanningPokerApp() {
                     </button>
                   );
                 })}
-                {/* NOUVEL EMPLACEMENT : Bouton Réinitialiser cette phase */}
                 {admin && (
                   <button
                     onClick={() => resetPhaseVotes(phase)}
                     style={{
                       padding: "6px 10px",
                       cursor: "pointer",
-                      backgroundColor: "#f0ad4e", // Orange plus doux
+                      backgroundColor: "#f0ad4e",
                       color: "#fff",
                       border: "none",
                       borderRadius: 4,
-                      marginLeft: 10, // Un peu d'espace par rapport aux chiffres
+                      marginLeft: 10,
                       fontSize: "0.8em",
                     }}
                     title="Réinitialiser les votes pour cette phase uniquement"
@@ -429,7 +463,8 @@ export default function PlanningPokerApp() {
             </div>
           ))}
 
-          {/* Le bouton "J'ai terminé l'estimation" n'apparaît que si l'utilisateur est validé et n'a pas fini/révélé */}
+          {/* Le bouton "J'ai terminé l'estimation" n'apparaît que si l'utilisateur est validé et n'a pas terminé
+          ET que les estimations ne sont pas révélées */}
           {userValidated && !finishedVoting[pseudo] && !revealed && (
             <button
               onClick={handleFinishEstimation}
@@ -448,24 +483,10 @@ export default function PlanningPokerApp() {
             </button>
           )}
 
-          {/* Section "Gestion des estimations (Admin)" - seulement les actions globales ici */}
+          {/* Section "Gestion globale (Admin)" - actions globales seulement */}
           {admin && (
             <div style={{ marginTop: 32, gridColumn: "span 2" }}>
-              <h3>Gestion globale (Admin)</h3>
-              <button
-                onClick={resetAll}
-                style={{
-                  marginTop: 8, // Ajusté la marge
-                  padding: "8px 12px",
-                  cursor: "pointer",
-                  backgroundColor: "#dc3545",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 4,
-                }}
-              >
-                Réinitialiser tout (y compris participants)
-              </button>
+              {/* Le bouton "Réinitialiser tout (y compris participants)" a été déplacé à gauche */}
             </div>
           )}
         </div>
