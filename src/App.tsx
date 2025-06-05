@@ -160,16 +160,27 @@ export default function PlanningPokerApp() {
 
   const resetPhaseVotes = async (phaseToReset: string) => { // Renommé pour plus de clarté
     const newVotes = { ...votes };
-    
+    const newFinishedVoting = { ...finishedVoting };
+    const newModifiedVoting = { ...modifiedVoting };
+
     // Efface uniquement les votes de la phase spécifiée
     if (newVotes[phaseToReset]) {
       delete newVotes[phaseToReset];
     }
     
+    // Réinitialise les états "finished" et "modified" pour tous les participants si la phase est réinitialisée
+    // Cela permet au bouton "J'ai terminé" de réapparaître chez les votants.
+    participants.forEach(p => {
+        newFinishedVoting[p] = false;
+        newModifiedVoting[p] = false;
+    });
+
     setVotes(newVotes);
+    setFinishedVoting(newFinishedVoting);
+    setModifiedVoting(newModifiedVoting);
     // Si les estimations étaient révélées, les cacher à nouveau pour cette phase
     setRevealed(false); 
-    await saveVotes(newVotes, finishedVoting, modifiedVoting, false, participants);
+    await saveVotes(newVotes, newFinishedVoting, newModifiedVoting, false, participants);
   };
 
   const resetAllVotesKeepParticipants = async () => {
@@ -271,32 +282,7 @@ export default function PlanningPokerApp() {
         )}
 
         {admin && (
-          <div style={{ marginTop: 24 }}>
-            <button
-              onClick={revealEstimations}
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                cursor: "pointer",
-                backgroundColor: "#007bff",
-                color: "#fff",
-                border: "none",
-                borderRadius: 4,
-                marginBottom: 8,
-              }}
-            >
-              Révéler les estimations
-            </button>
-            {revealed && (
-              <div style={{ fontWeight: "bold", fontSize: "1.2em", color: "#28a745", marginBottom: 16 }}>
-                Estimation totale (groupe) : {totalEstimate()}
-              </div>
-            )}
-          </div>
-        )}
-
-        {admin && (
-            <div style={{ marginTop: revealed ? 10 : 24 }}>
+            <div style={{ marginTop: 24 }}>
               <h3>Participants connectés</h3>
               {participants.length > 0 ? (
                   <ul style={{ listStyleType: "none", padding: 0 }}>
@@ -316,6 +302,30 @@ export default function PlanningPokerApp() {
                   </ul>
               ) : (
                   <p>Aucun participant connecté pour le moment.</p>
+              )}
+
+              {/* Nouveau positionnement du bouton "Révéler les estimations" */}
+              <button
+                onClick={revealEstimations}
+                style={{
+                  width: "100%",
+                  padding: "8px 12px",
+                  cursor: "pointer",
+                  backgroundColor: "#007bff",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 4,
+                  marginTop: 16, // Ajout d'une marge supérieure
+                  marginBottom: 8,
+                }}
+              >
+                Révéler les estimations
+              </button>
+
+              {revealed && (
+                <div style={{ fontWeight: "bold", fontSize: "1.2em", color: "#28a745", marginBottom: 16 }}>
+                  Estimation totale (groupe) : {totalEstimate()}
+                </div>
               )}
               {/* Boutons de réinitialisation pour l'admin */}
               <button
