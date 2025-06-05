@@ -76,8 +76,6 @@ export default function PlanningPokerApp() {
       const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
         if (user) {
           setCurrentUserId(user.uid);
-          // Si un pseudo est déjà défini et l'utilisateur est validé, on ne fait rien
-          // Sinon, on pourrait ici décider de créer un pseudo par défaut ou d'attendre l'input de l'utilisateur
         } else {
           // Si l'utilisateur n'est pas connecté, tente de se connecter avec le token ou de manière anonyme
           try {
@@ -117,11 +115,18 @@ export default function PlanningPokerApp() {
         setRevealed(data.revealed || false);
         setParticipants(data.participants || []);
 
-        // Si le pseudo est déjà entré par l'utilisateur et qu'il fait partie des participants,
-        // on le marque comme validé.
+        // *************** CORRECTION DU BUG ICI ***************
+        // L'état `userValidated` doit être dérivé de la liste des participants de Firestore,
+        // et non pas géré localement par `handleUserValidation`.
         if (pseudo && data.participants && data.participants.includes(pseudo)) {
             setUserValidated(true);
+        } else {
+            // Si le pseudo n'est plus dans la liste des participants (ex: retiré par l'admin),
+            // l'utilisateur n'est plus validé.
+            setUserValidated(false);
         }
+        // ****************************************************
+
       } else {
         // Si le document n'existe pas, initialise-le
         console.log("Document planningPoker/votes n'existe pas, création...");
@@ -173,10 +178,16 @@ export default function PlanningPokerApp() {
 
   const handleUserValidation = async () => {
     if (!pseudo.trim() || !db || !isAuthReady) return; // S'assurer que Firebase est prêt
-    setUserValidated(true);
+
+    // *************** CORRECTION DU BUG ICI ***************
+    // On ne met plus à jour `userValidated` ici.
+    // Il sera mis à jour par le listener `onSnapshot` une fois que le pseudo est dans les `participants` de Firestore.
+    // setUserValidated(true); // Supprimé
+    // ****************************************************
+
     if (!participants.includes(pseudo)) {
       const newParticipants = [...participants, pseudo];
-      setParticipants(newParticipants);
+      setParticipants(newParticipants); // Mise à jour locale, mais la source de vérité est Firestore via saveVotes
       await saveVotes(votes, finishedVoting, modifiedVoting, revealed, newParticipants);
     }
   };
@@ -301,244 +312,246 @@ export default function PlanningPokerApp() {
   const isLoggedIn = (userValidated && pseudo.trim() !== "") || admin;
 
   return (
-    <div className="flex flex-wrap gap-4 p-4 justify-center md:justify-start">
-      {/* Zone de login et admin */}
-      <div className="border border-gray-200 p-4 rounded-lg flex flex-col items-center flex-1 max-w-sm md:max-w-md lg:max-w-md shadow-md bg-white">
-        <p className="text-gray-700 mb-2">Entrez votre pseudo pour voter :</p>
-        <input
-          placeholder="Pseudo"
-          value={pseudo}
-          onChange={(e) => setPseudo(e.target.value)}
-          disabled={userValidated}
-          className="w-4/5 p-2 mb-2 rounded-md border border-gray-300 text-center focus:ring-blue-500 focus:border-blue-500"
-        />
-        <button
-          onClick={handleUserValidation}
-          disabled={!pseudo.trim() || userValidated}
-          className="w-4/5 p-2 mb-6 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Valider
-        </button>
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4 font-sans antialiased">
+      <div className="flex flex-col md:flex-row gap-6 w-full max-w-6xl">
+        {/* Zone de login et admin */}
+        <div className="border border-gray-200 p-6 rounded-lg flex flex-col items-center flex-1 max-w-full md:max-w-sm shadow-lg bg-white">
+          <p className="text-gray-700 mb-4 text-lg font-medium">Entrez votre pseudo pour voter :</p>
+          <input
+            placeholder="Pseudo"
+            value={pseudo}
+            onChange={(e) => setPseudo(e.target.value)}
+            disabled={userValidated}
+            className="w-4/5 p-2 mb-4 rounded-md border border-gray-300 text-center shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out"
+          />
+          <button
+            onClick={handleUserValidation}
+            disabled={!pseudo.trim() || userValidated}
+            className="w-4/5 p-2 mb-8 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200 ease-in-out"
+          >
+            Valider
+          </button>
 
-        <p className="font-bold text-gray-800 mb-2">Espace Admin :</p>
-        <input
-          type="password"
-          placeholder="Mot de passe admin"
-          value={adminPassword}
-          onChange={(e) => setAdminPassword(e.target.value)}
-          onKeyDown={handleLogin}
-          className="w-4/5 p-2 border border-gray-300 rounded-md text-center focus:ring-blue-500 focus:border-blue-500"
-        />
-        {admin && (
-          <p className="text-green-600 mt-2">Connecté en tant qu'administrateur</p>
-        )}
-
-        {admin && (
-            <div className="mt-6 w-full text-center">
-              <h3 className="text-lg font-semibold text-gray-800 mb-3">Participants connectés</h3>
-              <p className="text-sm text-gray-500 mb-2">
-                Votre identifiant unique: <span className="font-mono text-gray-600 break-all">{currentUserId || 'N/A'}</span>
-              </p>
-              {participants.length > 0 ? (
-                  <ul className="list-none p-0">
-                      {participants.map((p) => (
-                          <li key={p} className="mb-1 text-gray-700">
-                              {p}{" "}
-                              {/* Affichage des icônes de statut */}
-                              {modifiedVoting[p] ? (
-                                  <span title="A modifié son estimation" className="ml-1">🔄</span>
-                              ) : finishedVoting[p] ? (
-                                  <span title="A terminé son estimation" className="ml-1">✅</span>
-                              ) : (
-                                  <span title="N'a pas encore terminé son estimation" className="ml-1">⏳</span>
-                              )}
-                          </li>
-                      ))}
-                  </ul>
-              ) : (
-                  <p className="text-gray-500">Aucun participant connecté pour le moment.</p>
-              )}
-
-              <button
-                onClick={revealEstimations}
-                className="w-full p-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 mt-4"
-              >
-                Révéler les estimations
-              </button>
-
-              {revealed && (
-                <div className="font-bold text-xl text-green-600 mt-4">
-                  Estimation totale (groupe) : {totalEstimate()}
-                </div>
-              )}
-              {/* Boutons de réinitialisation pour l'admin */}
-              <button
-                  onClick={resetAllVotesKeepParticipants}
-                  className="mt-4 p-2 bg-yellow-500 text-gray-800 rounded-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-opacity-50 w-full"
-              >
-                  Réinitialiser tous les votes (conserver participants)
-              </button>
-              <button
-                onClick={resetAll}
-                className="p-2 mt-2 bg-red-500 text-white rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 w-full"
-              >
-                Réinitialiser tout (y compris participants)
-              </button>
-            </div>
-        )}
-        {/* Légende des valeurs Fibonacci pour les admins (gardée sur la gauche) */}
-        {admin && (
-          <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 shadow-sm mt-6 w-full">
-            <h4 className="m-0 text-gray-700 mb-2 font-semibold">Légende des valeurs :</h4>
-            {sortedFibonacciLabels.map(([value, description]) => (
-              <div key={value} className="mb-1">
-                <span className="font-bold text-gray-800">{value} : </span>
-                <span className="text-gray-600 text-sm">{description}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Zone des votes et affichages pour les votants */}
-      {isLoggedIn && (
-        <div className="border border-gray-200 p-4 rounded-lg flex-grow shadow-md bg-white grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-          {/* Section affichage total votant / total groupe pour les votants */}
-          {userValidated && (
-            <div className="col-span-full border-b border-dashed border-gray-200 pb-4 mb-4">
-              {finishedVoting[pseudo] && ( // N'affiche le total personnel que si l'utilisateur a cliqué "J'ai terminé"
-                <p className="font-bold text-lg text-blue-600 mb-2">
-                  Votre estimation totale : {calculatePersonalTotal()}
-                </p>
-              )}
-              {revealed && ( // N'affiche le total groupe que si c'est révélé
-                <p className="font-bold text-lg text-green-600">
-                  Estimation totale du groupe : {totalEstimate()}
-                </p>
-              )}
-            </div>
+          <p className="font-bold text-gray-800 mb-4 text-xl">Espace Admin :</p>
+          <input
+            type="password"
+            placeholder="Mot de passe admin"
+            value={adminPassword}
+            onChange={(e) => setAdminPassword(e.target.value)}
+            onKeyDown={handleLogin}
+            className="w-4/5 p-2 border border-gray-300 rounded-md text-center shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out"
+          />
+          {admin && (
+            <p className="text-green-600 mt-3 font-medium">Connecté en tant qu'administrateur</p>
           )}
 
-          {/* Légende des valeurs Fibonacci pour les VOTANTS (maintenant sur la gauche) */}
-          {userValidated && !admin && ( // S'affiche pour les votants et non pour l'admin
-            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 shadow-sm self-start max-h-min md:col-span-1">
-              <h4 className="m-0 text-gray-700 mb-2 font-semibold">Légende des valeurs :</h4>
+          {admin && (
+              <div className="mt-8 w-full text-center">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Participants connectés</h3>
+                <p className="text-sm text-gray-500 mb-3">
+                  Votre identifiant unique: <span className="font-mono text-gray-600 break-all text-xs">{currentUserId || 'N/A'}</span>
+                </p>
+                {participants.length > 0 ? (
+                    <ul className="list-none p-0">
+                        {participants.map((p) => (
+                            <li key={p} className="mb-2 text-gray-700 flex items-center justify-between px-2 py-1 bg-gray-50 rounded-md shadow-sm">
+                                {p}{" "}
+                                {/* Affichage des icônes de statut */}
+                                {modifiedVoting[p] ? (
+                                    <span title="A modifié son estimation" className="ml-2 text-lg">🔄</span>
+                                ) : finishedVoting[p] ? (
+                                    <span title="A terminé son estimation" className="ml-2 text-lg">✅</span>
+                                ) : (
+                                    <span title="N'a pas encore terminé son estimation" className="ml-2 text-lg">⏳</span>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                ) : (
+                    <p className="text-gray-500 italic">Aucun participant connecté pour le moment.</p>
+                )}
+
+                <button
+                  onClick={revealEstimations}
+                  className="w-full p-2.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 mt-6 shadow-md transition duration-200 ease-in-out"
+                >
+                  Révéler les estimations
+                </button>
+
+                {revealed && (
+                  <div className="font-bold text-2xl text-green-600 mt-5">
+                    Estimation totale (groupe) : {totalEstimate()}
+                  </div>
+                )}
+                {/* Boutons de réinitialisation pour l'admin */}
+                <button
+                    onClick={resetAllVotesKeepParticipants}
+                    className="mt-6 p-2.5 bg-yellow-500 text-gray-800 rounded-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-opacity-50 w-full shadow-md transition duration-200 ease-in-out"
+                >
+                    Réinitialiser tous les votes (conserver participants)
+                </button>
+                <button
+                  onClick={resetAll}
+                  className="p-2.5 mt-3 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 w-full shadow-md transition duration-200 ease-in-out"
+                >
+                  Réinitialiser tout (y compris participants)
+                </button>
+              </div>
+          )}
+          {/* Légende des valeurs Fibonacci pour les admins (gardée sur la gauche) */}
+          {admin && (
+            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 shadow-sm mt-8 w-full">
+              <h4 className="m-0 text-gray-700 mb-3 font-semibold text-lg">Légende des valeurs :</h4>
               {sortedFibonacciLabels.map(([value, description]) => (
-                <div key={value} className="mb-1">
-                  <span className="font-bold text-gray-800">{value} : </span>
-                  <span className="text-gray-600 text-sm">{description}</span>
+                <div key={value} className="mb-1.5 flex items-baseline">
+                  <span className="font-bold text-gray-800 text-base min-w-[30px]">{value} : </span>
+                  <span className="text-gray-600 text-sm ml-2">{description}</span>
                 </div>
               ))}
             </div>
           )}
+        </div>
 
-          <div className={`${userValidated && !admin ? "md:col-span-1" : "col-span-full"}`}>
-            {phases.map((phase, index) => (
-              <React.Fragment key={phase}>
-                <div className={`mb-6 p-4 rounded-lg bg-gray-50 shadow-sm ${admin ? "border border-gray-200" : ""}`}>
-                  <h3 className="text-xl font-semibold text-gray-800 mb-3">{phase}</h3>
+        {/* Zone des votes et affichages pour les votants */}
+        {isLoggedIn && (
+          <div className="border border-gray-200 p-6 rounded-lg flex-grow shadow-lg bg-white grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Section affichage total votant / total groupe pour les votants */}
+            {userValidated && (
+              <div className="col-span-full border-b border-dashed border-gray-200 pb-5 mb-6">
+                {finishedVoting[pseudo] && ( // N'affiche le total personnel que si l'utilisateur a cliqué "J'ai terminé"
+                  <p className="font-bold text-xl text-blue-600 mb-3">
+                    Votre estimation totale : {calculatePersonalTotal()}
+                  </p>
+                )}
+                {revealed && ( // N'affiche le total groupe que si c'est révélé
+                  <p className="font-bold text-xl text-green-600">
+                    Estimation totale du groupe : {totalEstimate()}
+                  </p>
+                )}
+              </div>
+            )}
 
-                  <div className="flex flex-wrap gap-2 items-center mb-4">
-                    {
-                      // Masque les boutons de vote Fibonacci si l'utilisateur est admin
-                      !admin && fibonacciValues.map((val) => {
-                        const isSelected = votes[phase]?.[pseudo] === val;
-                        // Les boutons sont désactivés SEULEMENT si les estimations sont révélées
-                        const isDisabled = revealed;
-                        return (
-                          <button
-                            key={val}
-                            onClick={() => handleVote(phase, val)}
-                            disabled={isDisabled}
-                            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200
-                              ${isSelected ? "border-2 border-blue-600 bg-blue-100 text-blue-800" : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"}
-                              ${isDisabled ? "opacity-70 cursor-not-allowed" : "cursor-pointer"}
-                            `}
-                            title={sortedFibonacciLabels.find(([v,d]) => parseFloat(v) === val)?.[1] || ""}
-                          >
-                            {val}
-                          </button>
-                        );
-                      })
-                    }
-                    {admin && (
-                      <button
-                        onClick={() => resetPhaseVotes(phase)}
-                        className="px-3 py-1.5 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-opacity-50 text-sm ml-auto"
-                        title="Réinitialiser les votes pour cette phase uniquement"
-                      >
-                        Reset Phase
-                      </button>
-                    )}
+            {/* Légende des valeurs Fibonacci pour les VOTANTS (maintenant sur la gauche) */}
+            {userValidated && !admin && ( // S'affiche pour les votants et non pour l'admin
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 shadow-sm self-start h-min lg:col-span-1">
+                <h4 className="m-0 text-gray-700 mb-3 font-semibold text-lg">Légende des valeurs :</h4>
+                {sortedFibonacciLabels.map(([value, description]) => (
+                  <div key={value} className="mb-1.5 flex items-baseline">
+                    <span className="font-bold text-gray-800 text-base min-w-[30px]">{value} : </span>
+                    <span className="text-gray-600 text-sm ml-2">{description}</span>
                   </div>
+                ))}
+              </div>
+            )}
 
-                  {revealed && ( // Affichage des détails par phase pour tous (votants et admin)
-                    <div className="mt-4 border-t border-dashed border-gray-200 pt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <p className="font-bold text-blue-700 mb-2">
-                          Moyenne du groupe : {calculateAverage(votes[phase]).toFixed(2)}
-                        </p>
-                        <h4 className="font-semibold text-gray-700 mb-2">Votes par valeur :</h4>
-                        <ul className="list-none p-0">
-                          {fibonacciValues.map((val) => {
-                            const currentPhaseVotes: Record<string, number> = votes[phase] || {};
-                            const count = Object.values(currentPhaseVotes).filter(
-                              (v) => v === val
-                            ).length;
+            <div className={`${userValidated && !admin ? "lg:col-span-1" : "col-span-full"}`}>
+              {phases.map((phase, index) => (
+                <React.Fragment key={phase}>
+                  <div className={`mb-8 p-5 rounded-lg bg-gray-50 shadow-md ${admin ? "border border-gray-200" : ""}`}>
+                    <h3 className="text-xl font-semibold text-gray-800 mb-4">{phase}</h3>
 
-                            return (
-                              count > 0 && (
-                                <li key={`${phase}-count-${val}`} className="mb-1 text-gray-700">
-                                  <span>{val} : </span>
-                                  <span className="font-bold text-purple-700">
-                                    {count} vote{count > 1 ? "s" : ""}
+                    <div className="flex flex-wrap gap-2 items-center mb-5">
+                      {
+                        // Masque les boutons de vote Fibonacci si l'utilisateur est admin
+                        !admin && fibonacciValues.map((val) => {
+                          const isSelected = votes[phase]?.[pseudo] === val;
+                          // Les boutons sont désactivés SEULEMENT si les estimations sont révélées
+                          const isDisabled = revealed;
+                          return (
+                            <button
+                              key={val}
+                              onClick={() => handleVote(phase, val)}
+                              disabled={isDisabled}
+                              className={`px-4 py-2 rounded-full text-base font-medium transition-all duration-200 shadow-sm
+                                ${isSelected ? "border-2 border-blue-600 bg-blue-200 text-blue-800" : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-100"}
+                                ${isDisabled ? "opacity-70 cursor-not-allowed" : "cursor-pointer hover:shadow-md"}
+                              `}
+                              title={sortedFibonacciLabels.find(([v,d]) => parseFloat(v) === val)?.[1] || ""}
+                            >
+                              {val}
+                            </button>
+                          );
+                        })
+                      }
+                      {admin && (
+                        <button
+                          onClick={() => resetPhaseVotes(phase)}
+                          className="px-4 py-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-opacity-50 text-sm ml-auto shadow-md transition duration-200 ease-in-out"
+                          title="Réinitialiser les votes pour cette phase uniquement"
+                        >
+                          Reset Phase
+                        </button>
+                      )}
+                    </div>
+
+                    {revealed && ( // Affichage des détails par phase pour tous (votants et admin)
+                      <div className="mt-5 border-t border-dashed border-gray-200 pt-5 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                        <div>
+                          <p className="font-bold text-blue-700 mb-3 text-lg">
+                            Moyenne du groupe : {calculateAverage(votes[phase]).toFixed(2)}
+                          </p>
+                          <h4 className="font-semibold text-gray-700 mb-3 text-base">Votes par valeur :</h4>
+                          <ul className="list-none p-0">
+                            {fibonacciValues.map((val) => {
+                              const currentPhaseVotes: Record<string, number> = votes[phase] || {};
+                              const count = Object.values(currentPhaseVotes).filter(
+                                (v) => v === val
+                              ).length;
+
+                              return (
+                                count > 0 && (
+                                  <li key={`${phase}-count-${val}`} className="mb-1.5 text-gray-700">
+                                    <span className="font-normal">{val} : </span>
+                                    <span className="font-bold text-purple-700">
+                                      {count} vote{count > 1 ? "s" : ""}
+                                    </span>
+                                  </li>
+                                )
+                              );
+                            })}
+                          </ul>
+                        </div>
+
+                        <div>
+                          <h4 className="font-semibold text-gray-700 mb-3 text-base">Détails des votes :</h4>
+                          <ul className="list-none p-0">
+                            {participants.map((participantName) => {
+                              const voteValue = votes[phase]?.[participantName];
+                              return (
+                                <li key={`${phase}-${participantName}`} className="mb-1.5 text-gray-700">
+                                  <span className="font-normal">{participantName} : </span>
+                                  <span className={`font-bold ${voteValue !== undefined ? 'text-gray-800' : 'text-red-500'}`}>
+                                    {voteValue !== undefined ? voteValue : "N'a pas voté"}
                                   </span>
                                 </li>
-                              )
-                            );
-                          })}
-                        </ul>
+                              );
+                            })}
+                          </ul>
+                        </div>
                       </div>
-
-                      <div>
-                        <h4 className="font-semibold text-gray-700 mb-2">Détails des votes :</h4>
-                        <ul className="list-none p-0">
-                          {participants.map((participantName) => {
-                            const voteValue = votes[phase]?.[participantName];
-                            return (
-                              <li key={`${phase}-${participantName}`} className="mb-1 text-gray-700">
-                                <span>{participantName} : </span>
-                                <span className={`font-bold ${voteValue !== undefined ? 'text-gray-800' : 'text-red-500'}`}>
-                                  {voteValue !== undefined ? voteValue : "N'a pas voté"}
-                                </span>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </div>
-                    </div>
+                    )}
+                  </div>{/* Fin de la div de la phase */}
+                  {/* Barre de séparation pour l'admin, sauf après la dernière phase */}
+                  {admin && index < phases.length - 1 && (
+                    <hr className="border-none border-t border-dashed border-gray-300 my-6" />
                   )}
-                </div>{/* Fin de la div de la phase */}
-                {/* Barre de séparation pour l'admin, sauf après la dernière phase */}
-                {admin && index < phases.length - 1 && (
-                  <hr className="border-none border-t border-dashed border-gray-300 my-5" />
-                )}
-              </React.Fragment>
-            ))}
+                </React.Fragment>
+              ))}
+            </div>
+
+            {/* Le bouton "J'ai terminé l'estimation" */}
+            {userValidated && (!finishedVoting[pseudo] || modifiedVoting[pseudo]) && !revealed && (
+              <button
+                onClick={handleFinishEstimation}
+                className="mt-6 p-3 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 w-full md:w-auto col-span-full justify-self-start shadow-lg transition duration-200 ease-in-out"
+              >
+                J'ai terminé l'estimation
+              </button>
+            )}
+
           </div>
-
-          {/* Le bouton "J'ai terminé l'estimation" */}
-          {userValidated && (!finishedVoting[pseudo] || modifiedVoting[pseudo]) && !revealed && (
-            <button
-              onClick={handleFinishEstimation}
-              className="mt-4 p-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 w-full md:w-auto md:col-span-full md:justify-self-start"
-            >
-              J'ai terminé l'estimation
-            </button>
-          )}
-
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
